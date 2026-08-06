@@ -1,0 +1,427 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Auth / Contas
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  ATENDENTE
+}
+
+model Plan {
+  id                   String   @id @default(cuid())
+  name                 String
+  maxUsers             Int      @default(1)
+  maxConversationsMo   Int?     @map("max_conversations_month")
+  price                Decimal  @default(0) @db.Decimal(10, 2)
+  features             Json     @default("{}")
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("plans")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(ATENDENTE)
+  active       Boolean   @default(true)
+  planId       String?   @map("plan_id")
+  plan         Plan?     @relation(fields: [planId], references: [id])
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  assignedClients      Client[]       @relation("ClientAssignedUser")
+  assignedConversations Conversation[] @relation("ConversationAssignedUser")
+  auditLogs            AuditLog[]
+
+  @@map("users")
+}
+
+// ============================================================
+// Clientes / Apólices
+// ============================================================
+
+model Client {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String   @unique
+  email          String?
+  document       String?  @map("document")
+  address        Json?
+  customFields   Json     @default("{}") @map("custom_fields")
+  funnelStageId  String?  @map("funnel_stage_id")
+  funnelStage    FunnelStage? @relation(fields: [funnelStageId], references: [id])
+  assignedUserId String?  @map("assigned_user_id")
+  assignedUser   User?    @relation("ClientAssignedUser", fields: [assignedUserId], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tags              ClientTag[]
+  policies          Policy[]
+  conversations     Conversation[]
+  followUpRuns      FollowUpRun[]
+  billingReminders  BillingReminder[]
+  scheduledMessages ScheduledMessageRecipient[]
+
+  @@index([funnelStageId])
+  @@index([assignedUserId])
+  @@map("clients")
+}
+
+enum PolicyStatus {
+  ATIVA
+  CANCELADA
+  INADIMPLENTE
+  VENCIDA
+}
+
+model Policy {
+  id            String       @id @default(cuid())
+  clientId      String       @map("client_id")
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  insuranceType String       @map("insurance_type")
+  insurer       String
+  policyNumber  String       @map("policy_number")
+  value         Decimal      @db.Decimal(10, 2)
+  dueDay        Int          @map("due_day")
+  status        PolicyStatus @default(ATIVA)
+  startDate     DateTime?    @map("start_date")
+  endDate       DateTime?    @map("end_date")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  billingReminders BillingReminder[]
+
+  @@index([clientId])
+  @@map("policies")
+}
+
+// ============================================================
+// Tags / Funil
+// ============================================================
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#0B5D5B")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clients ClientTag[]
+
+  @@map("tags")
+}
+
+model ClientTag {
+  clientId String @map("client_id")
+  tagId    String @map("tag_id")
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, tagId])
+  @@map("client_tags")
+}
+
+model FunnelStage {
+  id        String   @id @default(cuid())
+  name      String
+  order     Int      @default(0)
+  color     String   @default("#0B5D5B")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  clients Client[]
+
+  @@map("funnel_stages")
+}
+
+// ============================================================
+// Conversas / Mensagens
+// ============================================================
+
+enum ConversationStatus {
+  ABERTA
+  PENDENTE
+  RESOLVIDA
+}
+
+model Conversation {
+  id             String             @id @default(cuid())
+  clientId       String             @map("client_id")
+  client         Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  whatsappNumber String             @map("whatsapp_number")
+  status         ConversationStatus @default(ABERTA)
+  assignedUserId String?            @map("assigned_user_id")
+  assignedUser   User?              @relation("ConversationAssignedUser", fields: [assignedUserId], references: [id])
+  lastMessageAt  DateTime?          @map("last_message_at")
+  unreadCount    Int                @default(0) @map("unread_count")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  messages     Message[]
+  followUpRuns FollowUpRun[]
+
+  @@index([clientId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@map("conversations")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  DOCUMENT
+  TEMPLATE
+  VIDEO
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageSender {
+  HUMAN
+  AI
+  AUTOMATION
+  SYSTEM
+}
+
+model Message {
+  id                  String            @id @default(cuid())
+  conversationId      String            @map("conversation_id")
+  conversation        Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction           MessageDirection
+  type                MessageType       @default(TEXT)
+  content             String            @db.Text
+  mediaUrl            String?           @map("media_url")
+  status              MessageStatus     @default(PENDING)
+  sender              MessageSender     @default(HUMAN)
+  senderUserId        String?           @map("sender_user_id")
+  evolutionMessageId  String?           @map("evolution_message_id")
+  errorMessage        String?           @map("error_message")
+  createdAt           DateTime          @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([evolutionMessageId])
+  @@map("messages")
+}
+
+// ============================================================
+// Automações
+// ============================================================
+
+model Automation {
+  id         String   @id @default(cuid())
+  name       String
+  trigger    String
+  conditions Json     @default("[]")
+  actions    Json     @default("[]")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("automations")
+}
+
+// ============================================================
+// Follow-ups
+// ============================================================
+
+model FollowUp {
+  id            String   @id @default(cuid())
+  name          String
+  triggerType   String   @map("trigger_type")
+  triggerConfig Json     @default("{}") @map("trigger_config")
+  steps         Json     @default("[]")
+  stopCondition Json     @default("{}") @map("stop_condition")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  runs FollowUpRun[]
+
+  @@map("follow_ups")
+}
+
+enum FollowUpRunStatus {
+  RUNNING
+  COMPLETED
+  STOPPED
+  FAILED
+}
+
+model FollowUpRun {
+  id             String            @id @default(cuid())
+  followUpId     String            @map("follow_up_id")
+  followUp       FollowUp          @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  clientId       String            @map("client_id")
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  conversationId String?           @map("conversation_id")
+  conversation   Conversation?     @relation(fields: [conversationId], references: [id])
+  currentStep    Int               @default(0) @map("current_step")
+  status         FollowUpRunStatus @default(RUNNING)
+  nextRunAt      DateTime?         @map("next_run_at")
+  metadata       Json              @default("{}")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  @@index([followUpId])
+  @@index([clientId])
+  @@index([status])
+  @@map("follow_up_runs")
+}
+
+// ============================================================
+// Mensagens agendadas
+// ============================================================
+
+enum ScheduledMessageStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  PARTIAL
+}
+
+model ScheduledMessage {
+  id            String                  @id @default(cuid())
+  name          String
+  content       String                  @db.Text
+  targetType    String                  @map("target_type") // SINGLE | TAG | FUNNEL_STAGE | ALL
+  targetConfig  Json                    @default("{}") @map("target_config")
+  scheduledFor  DateTime                @map("scheduled_for")
+  status        ScheduledMessageStatus  @default(PENDING)
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  recipients ScheduledMessageRecipient[]
+
+  @@map("scheduled_messages")
+}
+
+enum ScheduledMessageRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model ScheduledMessageRecipient {
+  id                 String                           @id @default(cuid())
+  scheduledMessageId String                           @map("scheduled_message_id")
+  scheduledMessage   ScheduledMessage                 @relation(fields: [scheduledMessageId], references: [id], onDelete: Cascade)
+  clientId           String                           @map("client_id")
+  client             Client                           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status             ScheduledMessageRecipientStatus  @default(PENDING)
+  errorMessage       String?                          @map("error_message")
+  sentAt             DateTime?                        @map("sent_at")
+
+  @@index([scheduledMessageId])
+  @@index([clientId])
+  @@map("scheduled_message_recipients")
+}
+
+// ============================================================
+// Cobrança / Lembretes
+// ============================================================
+
+model BillingReminder {
+  id              String    @id @default(cuid())
+  name            String
+  policyId        String?   @map("policy_id")
+  policy          Policy?   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  clientId        String?   @map("client_id")
+  client          Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dueDay          Int?      @map("due_day") // usado apenas quando clientId e informado (sem apolice vinculada)
+  daysOffset      Int       @map("days_offset") // negativo = antes do vencimento, positivo = depois
+  messageTemplate String    @db.Text @map("message_template")
+  channel         String    @default("WHATSAPP")
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  history BillingReminderLog[]
+
+  @@index([policyId])
+  @@index([clientId])
+  @@map("billing_reminders")
+}
+
+enum BillingReminderLogStatus {
+  SENT
+  FAILED
+}
+
+model BillingReminderLog {
+  id                 String                    @id @default(cuid())
+  billingReminderId  String                    @map("billing_reminder_id")
+  billingReminder    BillingReminder           @relation(fields: [billingReminderId], references: [id], onDelete: Cascade)
+  status             BillingReminderLogStatus
+  errorMessage       String?                   @map("error_message")
+  sentAt             DateTime                  @default(now()) @map("sent_at")
+
+  @@index([billingReminderId])
+  @@map("billing_reminder_logs")
+}
+
+// ============================================================
+// IA
+// ============================================================
+
+model AISettings {
+  id                  String   @id @default(cuid())
+  provider            String   // OPENAI | ANTHROPIC | CUSTOM
+  apiKeyEncrypted      String   @map("api_key_encrypted")
+  model               String
+  baseUrl             String?  @map("base_url")
+  systemPrompt        String   @db.Text @map("system_prompt")
+  temperature         Decimal  @default(0.7) @db.Decimal(3, 2)
+  maxTokens           Int      @default(1024) @map("max_tokens")
+  allowedAutomationIds Json    @default("[]") @map("allowed_automation_ids")
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_settings")
+}
+
+// ============================================================
+// Auditoria
+// ============================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}

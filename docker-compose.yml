@@ -1,0 +1,68 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: crm-luma-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - crm-luma
+
+  backend:
+    build:
+      context: ./backend
+    container_name: crm-luma-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    command: sh -c "npx prisma migrate deploy && node dist/server.js"
+    depends_on:
+      - redis
+    ports:
+      - "3333:3333"
+    volumes:
+      - backend-uploads:/app/uploads
+    networks:
+      - crm-luma
+
+  worker:
+    build:
+      context: ./backend
+    container_name: crm-luma-worker
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    command: node dist/workers/index.js
+    depends_on:
+      - redis
+      - backend
+    volumes:
+      - backend-uploads:/app/uploads
+    networks:
+      - crm-luma
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3333}
+    container_name: crm-luma-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - crm-luma
+
+networks:
+  crm-luma:
+    driver: bridge
+
+volumes:
+  redis-data:
+  backend-uploads:
