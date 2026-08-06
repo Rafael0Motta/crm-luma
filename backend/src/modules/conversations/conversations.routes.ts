@@ -19,7 +19,7 @@ export const conversationsRouter = Router();
 conversationsRouter.use(authenticate);
 
 conversationsRouter.get("/", async (req, res) => {
-  const { status, assignedUserId, page, pageSize } = req.query as Record<string, string | undefined>;
+  const { status, assignedUserId, search, page, pageSize } = req.query as Record<string, string | undefined>;
 
   const pageNum = Math.max(1, Number(page) || 1);
   const size = Math.min(100, Math.max(1, Number(pageSize) || 50));
@@ -28,10 +28,18 @@ conversationsRouter.get("/", async (req, res) => {
     where: {
       ...(status ? { status: status as any } : {}),
       ...(assignedUserId ? { assignedUserId } : {}),
+      ...(search
+        ? {
+            client: {
+              OR: [{ name: { contains: search, mode: "insensitive" } }, { phone: { contains: search } }],
+            },
+          }
+        : {}),
     },
     include: {
       client: { include: { tags: { include: { tag: true } } } },
       assignedUser: { select: { id: true, name: true } },
+      messages: { orderBy: { createdAt: "desc" }, take: 1 },
     },
     orderBy: { lastMessageAt: "desc" },
     skip: (pageNum - 1) * size,
@@ -39,10 +47,16 @@ conversationsRouter.get("/", async (req, res) => {
   });
 
   res.json(
-    conversations.map((c) => ({
-      ...c,
-      client: c.client ? { ...c.client, tags: c.client.tags.map((t) => t.tag) } : null,
-    }))
+    conversations.map((c) => {
+      const { messages, ...rest } = c;
+      return {
+        ...rest,
+        client: c.client ? { ...c.client, tags: c.client.tags.map((t) => t.tag) } : null,
+        lastMessagePreview: messages[0]
+          ? { content: messages[0].content, type: messages[0].type, direction: messages[0].direction, sender: messages[0].sender }
+          : null,
+      };
+    })
   );
 });
 
@@ -141,6 +155,12 @@ conversationsRouter.put("/:id/status", async (req, res) => {
 conversationsRouter.put("/:id/assign", async (req, res) => {
   const { userId } = z.object({ userId: z.string().nullable() }).parse(req.body);
   const conversation = await prisma.conversation.update({ where: { id: req.params.id }, data: { assignedUserId: userId } });
+  res.json(conversation);
+});
+
+conversationsRouter.put("/:id/ai-toggle", async (req, res) => {
+  const { aiEnabled } = z.object({ aiEnabled: z.boolean() }).parse(req.body);
+  const conversation = await prisma.conversation.update({ where: { id: req.params.id }, data: { aiEnabled } });
   res.json(conversation);
 });
 

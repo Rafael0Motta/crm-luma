@@ -168,6 +168,7 @@ model Conversation {
   assignedUser   User?              @relation("ConversationAssignedUser", fields: [assignedUserId], references: [id])
   lastMessageAt  DateTime?          @map("last_message_at")
   unreadCount    Int                @default(0) @map("unread_count")
+  aiEnabled      Boolean            @default(true) @map("ai_enabled")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
 

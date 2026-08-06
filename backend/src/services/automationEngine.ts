@@ -127,6 +127,8 @@ async function executeAction(action: Action, event: AutomationEvent) {
       break;
     case "trigger_ai": {
       if (!event.conversationId) return;
+      const conversation = await prisma.conversation.findUnique({ where: { id: event.conversationId } });
+      if (!conversation?.aiEnabled) return;
       const history = await prisma.message.findMany({
         where: { conversationId: event.conversationId },
         orderBy: { createdAt: "asc" },

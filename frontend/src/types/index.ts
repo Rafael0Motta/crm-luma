@@ -79,7 +79,14 @@ export interface Conversation {
   assignedUser?: { id: string; name: string } | null;
   lastMessageAt: string | null;
   unreadCount: number;
+  aiEnabled: boolean;
   createdAt: string;
+  lastMessagePreview: {
+    content: string;
+    type: string;
+    direction: "INBOUND" | "OUTBOUND";
+    sender: MessageSender;
+  } | null;
 }
 
 export type MessageSender = "HUMAN" | "AI" | "AUTOMATION" | "SYSTEM";
