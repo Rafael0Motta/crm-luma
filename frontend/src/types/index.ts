@@ -1,24 +1,11 @@
 export type UserRole = "ADMIN" | "ATENDENTE";
 
-export interface Plan {
-  id: string;
-  name: string;
-  maxUsers: number;
-  maxConversationsMo: number | null;
-  price: string;
-  features: Record<string, boolean>;
-  active: boolean;
-  _count?: { users: number };
-}
-
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
   active: boolean;
-  planId: string | null;
-  plan?: Plan | null;
   createdAt: string;
 }
 

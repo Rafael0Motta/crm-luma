@@ -15,6 +15,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useLiveEvents } from "../hooks/useLiveEvents";
+import { NotificationBell } from "./NotificationBell";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -26,12 +28,13 @@ const NAV_ITEMS = [
   { to: "/agendadas", label: "Mensagens agendadas", icon: CalendarClock },
   { to: "/etiquetas", label: "Etiquetas", icon: Tag },
   { to: "/cobranca", label: "Cobrança", icon: Receipt },
-  { to: "/usuarios", label: "Usuários e Planos", icon: UserCog, adminOnly: true },
+  { to: "/usuarios", label: "Usuários", icon: UserCog, adminOnly: true },
   { to: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 
 export function Layout() {
   const { user, logout } = useAuth();
+  useLiveEvents();
 
   return (
     <div className="flex h-screen overflow-hidden bg-ink-50">
@@ -84,9 +87,14 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex flex-shrink-0 items-center justify-end border-b border-ink-100 bg-white px-6 py-2.5">
+          <NotificationBell />
+        </header>
+        <main className="flex-1 overflow-y-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

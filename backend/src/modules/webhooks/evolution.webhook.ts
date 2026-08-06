@@ -4,6 +4,7 @@ import { logger } from "../../config/logger";
 import { runAutomationsForEvent, cancelPendingFollowUpsForClient } from "../../services/automationEngine";
 import { getBase64FromMediaMessage } from "../../services/evolution";
 import { saveBase64ToUploads } from "../../services/mediaStorage";
+import { publishEvent } from "../../services/eventBus";
 import { MessageType } from "@prisma/client";
 
 export const evolutionWebhookRouter = Router();
@@ -95,7 +96,7 @@ async function handleInboundMessage(data: EvolutionMessageData) {
     });
   }
 
-  await prisma.message.create({
+  const message = await prisma.message.create({
     data: {
       conversationId: conversation.id,
       direction: "INBOUND",
@@ -112,6 +113,8 @@ async function handleInboundMessage(data: EvolutionMessageData) {
     where: { id: conversation.id },
     data: { lastMessageAt: new Date(), unreadCount: { increment: 1 }, status: "ABERTA" },
   });
+
+  await publishEvent({ type: "message", conversationId: conversation.id, message });
 
   await cancelPendingFollowUpsForClient(client.id);
 

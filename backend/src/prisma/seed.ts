@@ -2,19 +2,6 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../config/prisma";
 
 async function main() {
-  const plan = await prisma.plan.upsert({
-    where: { id: "seed-plan-starter" },
-    update: {},
-    create: {
-      id: "seed-plan-starter",
-      name: "Starter",
-      maxUsers: 5,
-      maxConversationsMo: 1000,
-      price: 0,
-      features: { automations: true, followUps: true, aiIntegration: true },
-    },
-  });
-
   const stages = [
     { name: "Novo Lead", order: 0, color: "#1B4B4A" },
     { name: "Em Contato", order: 1, color: "#2A6F6D" },
@@ -40,7 +27,6 @@ async function main() {
         email: adminEmail,
         passwordHash,
         role: "ADMIN",
-        planId: plan.id,
       },
     });
     console.log(`Usuario admin criado: ${adminEmail} / senha: TrocarSenha123! (troque no primeiro acesso)`);

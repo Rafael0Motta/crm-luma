@@ -16,22 +16,6 @@ enum UserRole {
   ATENDENTE
 }
 
-model Plan {
-  id                   String   @id @default(cuid())
-  name                 String
-  maxUsers             Int      @default(1)
-  maxConversationsMo   Int?     @map("max_conversations_month")
-  price                Decimal  @default(0) @db.Decimal(10, 2)
-  features             Json     @default("{}")
-  active               Boolean  @default(true)
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
-
-  users User[]
-
-  @@map("plans")
-}
-
 model User {
   id           String    @id @default(cuid())
   name         String
@@ -39,8 +23,6 @@ model User {
   passwordHash String    @map("password_hash")
   role         UserRole  @default(ATENDENTE)
   active       Boolean   @default(true)
-  planId       String?   @map("plan_id")
-  plan         Plan?     @relation(fields: [planId], references: [id])
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 

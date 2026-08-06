@@ -50,7 +50,7 @@ function signRefreshToken(userId: string): string {
 authRouter.post("/login", loginRateLimit, async (req, res) => {
   const { email, password } = loginSchema.parse(req.body);
 
-  const user = await prisma.user.findUnique({ where: { email }, include: { plan: true } });
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.active) {
     throw new AppError("Credenciais invalidas", 401);
   }
@@ -70,7 +70,6 @@ authRouter.post("/login", loginRateLimit, async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      plan: user.plan ? { id: user.plan.id, name: user.plan.name } : null,
     },
   });
 });
@@ -102,10 +101,7 @@ authRouter.post("/refresh", async (req, res) => {
 });
 
 authRouter.get("/me", authenticate, async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.sub },
-    include: { plan: true },
-  });
+  const user = await prisma.user.findUnique({ where: { id: req.user!.sub } });
   if (!user) throw new AppError("Usuario nao encontrado", 404);
 
   res.json({
@@ -114,6 +110,5 @@ authRouter.get("/me", authenticate, async (req, res) => {
     email: user.email,
     role: user.role,
     active: user.active,
-    plan: user.plan,
   });
 });

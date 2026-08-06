@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Send,
@@ -12,9 +13,10 @@ import {
   CalendarClock,
   Image as ImageIcon,
   Mic,
+  UserPlus,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { Conversation, ConversationStatus, Message, User } from "../types";
+import { Conversation, ConversationStatus, FunnelStage, Message, User } from "../types";
 import { Badge, LoadingState, EmptyState, Select, Modal, Label, Input, Textarea, Button } from "../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
@@ -121,6 +123,7 @@ function dateSeparatorLabel(date: string): string {
 
 export function Inbox() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | "TODAS">("TODAS");
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
@@ -128,8 +131,24 @@ export function Inbox() {
   const [draft, setDraft] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [newConversationError, setNewConversationError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (openId) {
+      setSelectedId(openId);
+      setStatusFilter("TODAS");
+      setSearch("");
+      setSearchParams((params) => {
+        params.delete("open");
+        return params;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: conversations, isLoading } = useQuery({
     queryKey: ["conversations", statusFilter, search, visibleCount],
@@ -151,6 +170,11 @@ export function Inbox() {
     queryKey: ["users-list"],
     queryFn: async () => (await api.get<User[]>("/users")).data,
     retry: false,
+  });
+
+  const { data: funnelStages } = useQuery({
+    queryKey: ["funnel-stages"],
+    queryFn: async () => (await api.get<FunnelStage[]>("/funnel-stages")).data,
   });
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
@@ -184,6 +208,26 @@ export function Inbox() {
   const assignMutation = useMutation({
     mutationFn: async (userId: string | null) => api.put(`/conversations/${selectedId}/assign`, { userId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+
+  const funnelStageMutation = useMutation({
+    mutationFn: async (funnelStageId: string) => api.put(`/clients/${selected?.clientId}/funnel-stage`, { funnelStageId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const newConversationMutation = useMutation({
+    mutationFn: async (payload: { phone: string; name?: string }) => api.post<Conversation>("/conversations/start", payload),
+    onSuccess: (res) => {
+      setNewConversationOpen(false);
+      setNewConversationError(null);
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      setSelectedId(res.data.id);
+    },
+    onError: (err) => setNewConversationError(getApiErrorMessage(err)),
+    meta: { skipGlobalErrorToast: true },
   });
 
   const aiToggleMutation = useMutation({
@@ -240,6 +284,13 @@ export function Inbox() {
     });
   }
 
+  function handleNewConversationSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const name = String(form.get("name") ?? "").trim();
+    newConversationMutation.mutate({ phone: String(form.get("phone")), ...(name ? { name } : {}) });
+  }
+
   // Agrupa mensagens por dia para exibir separadores de data no fio da conversa
   const groupedMessages: { dateLabel: string; items: Message[] }[] = [];
   for (const msg of messages ?? []) {
@@ -253,10 +304,20 @@ export function Inbox() {
   }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-full">
       <div className="flex w-80 flex-shrink-0 flex-col border-r border-ink-100 bg-white">
         <div className="border-b border-ink-100 px-5 py-4">
-          <h1 className="text-base font-semibold text-ink-950">Conversas</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-base font-semibold text-ink-950">Conversas</h1>
+            <button
+              onClick={() => setNewConversationOpen(true)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-ink-700 hover:bg-ink-100"
+              title="Iniciar nova conversa por numero"
+            >
+              <UserPlus size={14} />
+              Nova
+            </button>
+          </div>
           <div className="relative mt-3">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
@@ -341,39 +402,63 @@ export function Inbox() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b border-ink-100 bg-white px-6 py-3">
-              <div className="flex items-center gap-3">
-                <Avatar name={selected.client?.name ?? selected.whatsappNumber} size={38} />
-                <div>
-                  <p className="text-sm font-semibold text-ink-950">{selected.client?.name ?? selected.whatsappNumber}</p>
-                  <p className="text-xs text-ink-500">{selected.whatsappNumber}</p>
+            <div className="border-b border-ink-100 bg-white px-6 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar name={selected.client?.name ?? selected.whatsappNumber} size={38} />
+                  <div>
+                    <p className="text-sm font-semibold text-ink-950">{selected.client?.name ?? selected.whatsappNumber}</p>
+                    <p className="text-xs text-ink-500">{selected.whatsappNumber}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => aiToggleMutation.mutate(!selected.aiEnabled)}
+                    title={selected.aiEnabled ? "IA ativada nesta conversa — clique para desativar" : "IA desativada nesta conversa — clique para ativar"}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                      selected.aiEnabled
+                        ? "border-ink-700 bg-ink-800 text-white hover:bg-ink-700"
+                        : "border-ink-200 text-ink-500 hover:bg-ink-50"
+                    }`}
+                  >
+                    <Bot size={14} />
+                    IA {selected.aiEnabled ? "ativa" : "inativa"}
+                  </button>
+                  <button
+                    onClick={() => setScheduleOpen(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    title="Agendar mensagem para este cliente"
+                  >
+                    <CalendarClock size={14} />
+                    Agendar
+                  </button>
+                  <button
+                    onClick={() => statusMutation.mutate("RESOLVIDA")}
+                    disabled={selected.status === "RESOLVIDA"}
+                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-40"
+                  >
+                    <CheckCircle2 size={14} />
+                    Resolver
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => aiToggleMutation.mutate(!selected.aiEnabled)}
-                  title={selected.aiEnabled ? "IA ativada nesta conversa — clique para desativar" : "IA desativada nesta conversa — clique para ativar"}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                    selected.aiEnabled
-                      ? "border-ink-700 bg-ink-800 text-white hover:bg-ink-700"
-                      : "border-ink-200 text-ink-500 hover:bg-ink-50"
-                  }`}
+              <div className="mt-2.5 flex items-center gap-2 pl-[50px]">
+                <Select
+                  value={selected.client?.funnelStageId ?? ""}
+                  onChange={(e) => e.target.value && funnelStageMutation.mutate(e.target.value)}
+                  className="!w-44 !py-1.5 text-xs"
                 >
-                  <Bot size={14} />
-                  IA {selected.aiEnabled ? "ativa" : "inativa"}
-                </button>
-                <button
-                  onClick={() => setScheduleOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
-                  title="Agendar mensagem para este cliente"
-                >
-                  <CalendarClock size={14} />
-                  Agendar
-                </button>
+                  <option value="">Sem etapa</option>
+                  {funnelStages?.map((stage) => (
+                    <option key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </option>
+                  ))}
+                </Select>
                 <Select
                   value={selected.assignedUserId ?? ""}
                   onChange={(e) => assignMutation.mutate(e.target.value || null)}
-                  className="!w-40 text-xs"
+                  className="!w-40 !py-1.5 text-xs"
                 >
                   <option value="">Sem atendente</option>
                   {users?.map((u) => (
@@ -382,14 +467,6 @@ export function Inbox() {
                     </option>
                   ))}
                 </Select>
-                <button
-                  onClick={() => statusMutation.mutate("RESOLVIDA")}
-                  disabled={selected.status === "RESOLVIDA"}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-40"
-                >
-                  <CheckCircle2 size={14} />
-                  Resolver
-                </button>
               </div>
             </div>
 
@@ -515,6 +592,27 @@ export function Inbox() {
           </form>
         </Modal>
       )}
+
+      <Modal open={newConversationOpen} onClose={() => setNewConversationOpen(false)} title="Nova conversa">
+        <form onSubmit={handleNewConversationSubmit} className="space-y-4">
+          <p className="text-sm text-ink-500">
+            Informe o telefone do lead. Se ainda não existir um cliente com esse número, ele será criado automaticamente.
+          </p>
+          <div>
+            <Label>Telefone (WhatsApp)</Label>
+            <Input name="phone" required placeholder="5511999999999" />
+          </div>
+          <div>
+            <Label>Nome (opcional)</Label>
+            <Input name="name" placeholder="Nome do lead" />
+          </div>
+          {newConversationError && <p className="text-sm text-red-600">{newConversationError}</p>}
+          <Button type="submit" className="w-full" loading={newConversationMutation.isPending}>
+            <UserPlus size={16} />
+            Iniciar conversa
+          </Button>
+        </form>
+      </Modal>
     </div>
   );
 }

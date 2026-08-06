@@ -9,7 +9,6 @@ import { UPLOADS_DIR } from "./services/mediaStorage";
 
 import { authRouter } from "./modules/auth/auth.routes";
 import { usersRouter } from "./modules/users/users.routes";
-import { plansRouter } from "./modules/plans/plans.routes";
 import { clientsRouter, policiesRouter } from "./modules/clients/clients.routes";
 import { tagsRouter } from "./modules/tags/tags.routes";
 import { funnelStagesRouter } from "./modules/funnel-stages/funnel-stages.routes";
@@ -22,6 +21,7 @@ import { billingRemindersRouter } from "./modules/billing-reminders/billing-remi
 import { aiSettingsRouter } from "./modules/ai-settings/ai-settings.routes";
 import { settingsRouter } from "./modules/settings/settings.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { eventsRouter } from "./modules/events/events.routes";
 
 export const app = express();
 
@@ -35,7 +35,6 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);
-app.use("/plans", plansRouter);
 app.use("/clients", clientsRouter);
 app.use("/policies", policiesRouter);
 app.use("/tags", tagsRouter);
@@ -49,6 +48,7 @@ app.use("/billing-reminders", billingRemindersRouter);
 app.use("/ai-settings", aiSettingsRouter);
 app.use("/settings", settingsRouter);
 app.use("/dashboard", dashboardRouter);
+app.use("/events", eventsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

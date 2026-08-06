@@ -2,6 +2,7 @@ import { prisma } from "../config/prisma";
 import { logger } from "../config/logger";
 import { sendTextMessage } from "./evolution";
 import { generateAIReply } from "./aiProvider";
+import { publishEvent } from "./eventBus";
 
 export type AutomationTrigger =
   | "new_conversation"
@@ -93,7 +94,7 @@ async function executeAction(action: Action, event: AutomationEvent) {
       if (!client) return;
       const result = await sendTextMessage(client.phone, action.content);
       if (event.conversationId) {
-        await prisma.message.create({
+        const sentMessage = await prisma.message.create({
           data: {
             conversationId: event.conversationId,
             direction: "OUTBOUND",
@@ -106,6 +107,7 @@ async function executeAction(action: Action, event: AutomationEvent) {
           },
         });
         await prisma.conversation.update({ where: { id: event.conversationId }, data: { lastMessageAt: new Date() } });
+        await publishEvent({ type: "message", conversationId: event.conversationId, message: sentMessage });
       }
       break;
     }
@@ -143,7 +145,7 @@ async function executeAction(action: Action, event: AutomationEvent) {
       const client = await prisma.client.findUnique({ where: { id: event.clientId } });
       if (!client) return;
       const result = await sendTextMessage(client.phone, reply);
-      await prisma.message.create({
+      const aiMessage = await prisma.message.create({
         data: {
           conversationId: event.conversationId,
           direction: "OUTBOUND",
@@ -156,6 +158,7 @@ async function executeAction(action: Action, event: AutomationEvent) {
         },
       });
       await prisma.conversation.update({ where: { id: event.conversationId }, data: { lastMessageAt: new Date() } });
+      await publishEvent({ type: "message", conversationId: event.conversationId, message: aiMessage });
       break;
     }
     case "notify_internal":

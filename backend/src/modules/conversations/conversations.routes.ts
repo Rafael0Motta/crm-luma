@@ -7,6 +7,9 @@ import { AppError } from "../../middlewares/errorHandler";
 import { mediaTypeFromMimetype, sendMediaMessage, sendTextMessage } from "../../services/evolution";
 import { saveBufferToUploads } from "../../services/mediaStorage";
 import { cancelPendingFollowUpsForClient } from "../../services/automationEngine";
+import { publishEvent } from "../../services/eventBus";
+import { findOrCreateOpenConversation } from "../../services/conversationHelper";
+import { logAudit } from "../../services/auditLog";
 
 const MEDIA_TYPE_TO_MESSAGE_TYPE = { image: "IMAGE", video: "VIDEO", audio: "AUDIO", document: "DOCUMENT" } as const;
 
@@ -102,6 +105,8 @@ conversationsRouter.post("/:id/messages", async (req, res) => {
     data: { lastMessageAt: new Date() },
   });
 
+  await publishEvent({ type: "message", conversationId: conversation.id, message });
+
   if (!result.success) {
     throw new AppError(`Falha ao enviar mensagem: ${result.errorMessage}`, 502, { message });
   }
@@ -139,6 +144,8 @@ conversationsRouter.post("/:id/messages/media", upload.single("file"), async (re
 
   await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
 
+  await publishEvent({ type: "message", conversationId: conversation.id, message });
+
   if (!result.success) {
     throw new AppError(`Falha ao enviar midia: ${result.errorMessage}`, 502, { message });
   }
@@ -169,4 +176,64 @@ conversationsRouter.post("/:id/resolve-followups", async (req, res) => {
   if (!conversation) throw new AppError("Conversa nao encontrada", 404);
   await cancelPendingFollowUpsForClient(conversation.clientId);
   res.status(204).send();
+});
+
+const CONVERSATION_DETAIL_INCLUDE = {
+  client: { include: { tags: { include: { tag: true } } } },
+  assignedUser: { select: { id: true, name: true } },
+} as const;
+
+function serializeConversation(conversation: any) {
+  return {
+    ...conversation,
+    client: conversation.client ? { ...conversation.client, tags: conversation.client.tags.map((t: any) => t.tag) } : null,
+    lastMessagePreview: null,
+  };
+}
+
+const startConversationSchema = z.object({
+  phone: z.string().min(8),
+  name: z.string().min(1).optional(),
+});
+
+conversationsRouter.post("/start", async (req, res) => {
+  const { phone, name } = startConversationSchema.parse(req.body);
+  const normalizedPhone = phone.replace(/\D/g, "");
+  if (normalizedPhone.length < 8) throw new AppError("Telefone invalido", 422);
+
+  let client = await prisma.client.findUnique({ where: { phone: normalizedPhone } });
+  if (!client) {
+    client = await prisma.client.create({ data: { name: name || normalizedPhone, phone: normalizedPhone } });
+    await logAudit(req.user!.sub, "create", "Client", client.id, { name: client.name, source: "manual_conversation" });
+  }
+
+  const conversation = await findOrCreateOpenConversation(client.id, normalizedPhone);
+  const full = await prisma.conversation.findUnique({ where: { id: conversation.id }, include: CONVERSATION_DETAIL_INCLUDE });
+
+  res.status(201).json(serializeConversation(full));
+});
+
+conversationsRouter.get("/stale", async (req, res) => {
+  const hours = Math.max(1, Number(req.query.hours) || 24);
+  const threshold = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+  const conversations = await prisma.conversation.findMany({
+    where: { status: { in: ["ABERTA", "PENDENTE"] }, lastMessageAt: { lte: threshold } },
+    include: {
+      client: { select: { id: true, name: true, phone: true } },
+      messages: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
+    orderBy: { lastMessageAt: "asc" },
+  });
+
+  const stale = conversations.filter((c) => c.messages[0]?.direction === "OUTBOUND");
+
+  res.json(
+    stale.map((c) => ({
+      id: c.id,
+      client: c.client,
+      lastMessageAt: c.lastMessageAt,
+      hoursSinceLastMessage: c.lastMessageAt ? Math.floor((Date.now() - c.lastMessageAt.getTime()) / (60 * 60 * 1000)) : null,
+    }))
+  );
 });

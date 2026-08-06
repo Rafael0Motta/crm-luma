@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../config/prisma";
 import { authenticate } from "../../middlewares/auth";
 import { AppError } from "../../middlewares/errorHandler";
-import { sendTextMessage } from "../../services/evolution";
+import { deliverScheduledMessageToRecipient } from "../../services/scheduledMessageDelivery";
 
 export const scheduledMessagesRouter = Router();
 scheduledMessagesRouter.use(authenticate);
@@ -103,16 +103,8 @@ scheduledMessagesRouter.post("/:id/send-now", async (req, res) => {
   let sent = 0;
   let failed = 0;
   for (const recipient of message.recipients) {
-    const result = await sendTextMessage(recipient.client.phone, message.content);
-    await prisma.scheduledMessageRecipient.update({
-      where: { id: recipient.id },
-      data: {
-        status: result.success ? "SENT" : "FAILED",
-        errorMessage: result.errorMessage,
-        sentAt: result.success ? new Date() : null,
-      },
-    });
-    result.success ? sent++ : failed++;
+    const success = await deliverScheduledMessageToRecipient(recipient.id, recipient.client, message.content);
+    success ? sent++ : failed++;
   }
 
   const finalStatus = failed === 0 ? "SENT" : sent === 0 ? "FAILED" : "PARTIAL";

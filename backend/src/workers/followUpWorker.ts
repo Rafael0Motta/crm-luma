@@ -3,6 +3,8 @@ import { redisConnection } from "../config/redis";
 import { prisma } from "../config/prisma";
 import { logger } from "../config/logger";
 import { sendTextMessage } from "../services/evolution";
+import { findOrCreateOpenConversation } from "../services/conversationHelper";
+import { publishEvent } from "../services/eventBus";
 
 interface FollowUpStep {
   message: string;
@@ -103,10 +105,14 @@ async function processDueRuns() {
     try {
       const result = await sendTextMessage(run.client.phone, step.message);
 
-      if (run.conversationId) {
-        await prisma.message.create({
+      const conversation = run.conversationId
+        ? await prisma.conversation.findUnique({ where: { id: run.conversationId } })
+        : await findOrCreateOpenConversation(run.clientId, run.client.phone);
+
+      if (conversation) {
+        const message = await prisma.message.create({
           data: {
-            conversationId: run.conversationId,
+            conversationId: conversation.id,
             direction: "OUTBOUND",
             type: "TEXT",
             content: step.message,
@@ -116,6 +122,8 @@ async function processDueRuns() {
             errorMessage: result.errorMessage,
           },
         });
+        await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
+        await publishEvent({ type: "message", conversationId: conversation.id, message });
       }
 
       const nextStep = run.currentStep + 1;

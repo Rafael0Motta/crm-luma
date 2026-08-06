@@ -49,7 +49,7 @@ export function Funil() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       <PageHeader
         title="Funil de vendas"
         subtitle="Arraste os cards para mover clientes entre etapas"
