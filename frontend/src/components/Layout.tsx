@@ -13,6 +13,7 @@ import {
   Settings,
   Sparkles,
   LogOut,
+  BookOpen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useLiveEvents } from "../hooks/useLiveEvents";
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { to: "/agendadas", label: "Mensagens agendadas", icon: CalendarClock },
   { to: "/etiquetas", label: "Etiquetas", icon: Tag },
   { to: "/cobranca", label: "Cobrança", icon: Receipt },
+  { to: "/documentacao", label: "Documentação", icon: BookOpen },
   { to: "/usuarios", label: "Usuários", icon: UserCog, adminOnly: true },
   { to: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
 ];

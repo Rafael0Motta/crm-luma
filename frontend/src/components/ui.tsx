@@ -69,8 +69,8 @@ export function Label({ children }: { children: ReactNode }) {
   return <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-500">{children}</label>;
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-xl border border-ink-100 bg-white shadow-card ${className}`}>{children}</div>;
+export function Card({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
+  return <div id={id} className={`rounded-xl border border-ink-100 bg-white shadow-card ${className}`}>{children}</div>;
 }
 
 export function Badge({ children, color }: { children: ReactNode; color?: string }) {
