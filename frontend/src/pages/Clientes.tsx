@@ -1,6 +1,6 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useRef, ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ShieldPlus, Pencil, X, Check } from "lucide-react";
+import { Plus, Search, Trash2, ShieldPlus, Pencil, X, Check, Upload, Download, Tag as TagIcon, ArrowRightLeft } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { Client, FunnelStage, Paginated, Policy, Tag, User } from "../types";
 import { PageHeader, Button, Modal, Input, Select, Label, Badge, LoadingState, EmptyState, Card } from "../components/ui";
@@ -11,16 +11,25 @@ export function Clientes() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [filterStageId, setFilterStageId] = useState("");
+  const [filterTagId, setFilterTagId] = useState("");
+  const [filterUserId, setFilterUserId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [allFilteredSelected, setAllFilteredSelected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filters = { funnelStageId: filterStageId, tagId: filterTagId, assignedUserId: filterUserId };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["clients", search, page],
+    queryKey: ["clients", search, page, filterStageId, filterTagId, filterUserId],
     queryFn: async () =>
       (
         await api.get<Paginated<Client>>("/clients", {
-          params: { ...(search ? { search } : {}), page, pageSize: PAGE_SIZE },
+          params: { ...(search ? { search } : {}), ...filters, page, pageSize: PAGE_SIZE },
         })
       ).data,
   });
@@ -43,6 +52,17 @@ export function Clientes() {
     queryFn: async () => (await api.get<Tag[]>("/tags")).data,
   });
 
+  function resetSelection() {
+    setSelectedIds(new Set());
+    setAllFilteredSelected(false);
+  }
+
+  function updateFilter(setter: (v: string) => void, value: string) {
+    setter(value);
+    setPage(1);
+    resetSelection();
+  }
+
   const createMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => api.post("/clients", payload),
     onSuccess: () => {
@@ -62,6 +82,47 @@ export function Clientes() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => api.post("/clients/bulk-delete", { ids }),
+    onSuccess: () => {
+      resetSelection();
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const bulkTagMutation = useMutation({
+    mutationFn: async ({ ids, tagId }: { ids: string[]; tagId: string }) => api.post("/clients/bulk-tag", { ids, tagId, action: "add" }),
+    onSuccess: () => {
+      resetSelection();
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const bulkStageMutation = useMutation({
+    mutationFn: async ({ ids, funnelStageId }: { ids: string[]; funnelStageId: string }) =>
+      api.post("/clients/bulk-stage", { ids, funnelStageId }),
+    onSuccess: () => {
+      resetSelection();
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return (await api.post("/clients/import", form, { headers: { "Content-Type": "multipart/form-data" } })).data as {
+        created: number;
+        updated: number;
+        errors: string[];
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+    },
+  });
+
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -75,34 +136,205 @@ export function Clientes() {
     });
   }
 
+  function toggleSelect(id: string) {
+    setAllFilteredSelected(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePageSelection() {
+    if (!clients) return;
+    const allSelected = clients.every((c) => selectedIds.has(c.id));
+    setAllFilteredSelected(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        clients.forEach((c) => next.delete(c.id));
+      } else {
+        clients.forEach((c) => next.add(c.id));
+      }
+      return next;
+    });
+  }
+
+  async function handleSelectAllMatching() {
+    const res = await api.get<string[]>("/clients/ids", { params: { ...(search ? { search } : {}), ...filters } });
+    setSelectedIds(new Set(res.data));
+    setAllFilteredSelected(true);
+  }
+
+  async function handleExport(onlySelected: boolean) {
+    const params: Record<string, string> =
+      onlySelected && selectedIds.size > 0
+        ? { ids: Array.from(selectedIds).join(",") }
+        : ({ ...(search ? { search } : {}), ...filters } as Record<string, string>);
+    const res = await api.get("/clients/export", { params, responseType: "blob" });
+    const url = URL.createObjectURL(new Blob([res.data]));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `clientes-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) importMutation.mutate(file);
+    e.target.value = "";
+  }
+
+  const allOnPageSelected = Boolean(clients?.length) && clients!.every((c) => selectedIds.has(c.id));
+
   return (
     <div>
       <PageHeader
         title="Clientes"
         subtitle={`${data?.total ?? 0} clientes cadastrados`}
         action={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus size={16} />
-            Novo cliente
-          </Button>
+          <div className="flex gap-2">
+            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <Upload size={16} />
+              Importar
+            </Button>
+            <Button variant="secondary" onClick={() => handleExport(selectedIds.size > 0)}>
+              <Download size={16} />
+              Exportar
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus size={16} />
+              Novo cliente
+            </Button>
+          </div>
         }
       />
 
       <div className="p-8">
-        <div className="mb-4 max-w-sm">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <Input
-              placeholder="Buscar por nome, telefone, e-mail..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-9"
-            />
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <div className="max-w-sm flex-1">
+            <Label>Buscar</Label>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+              <Input
+                placeholder="Nome, telefone, e-mail..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                  resetSelection();
+                }}
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <div className="w-48">
+            <Label>Etapa</Label>
+            <Select value={filterStageId} onChange={(e) => updateFilter(setFilterStageId, e.target.value)}>
+              <option value="">Todas</option>
+              {stages?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-48">
+            <Label>Etiqueta</Label>
+            <Select value={filterTagId} onChange={(e) => updateFilter(setFilterTagId, e.target.value)}>
+              <option value="">Todas</option>
+              {tags?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-48">
+            <Label>Atendente</Label>
+            <Select value={filterUserId} onChange={(e) => updateFilter(setFilterUserId, e.target.value)}>
+              <option value="">Todos</option>
+              {users?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
+
+        {selectedIds.size > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-ink-200 bg-ink-50 px-4 py-3">
+            <span className="text-sm font-medium text-ink-800">{selectedIds.size} selecionado(s)</span>
+
+            {!allFilteredSelected && data && data.total > (clients?.length ?? 0) && (
+              <button onClick={handleSelectAllMatching} className="text-xs font-medium text-ink-700 underline">
+                Selecionar todos os {data.total} que correspondem aos filtros
+              </button>
+            )}
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1">
+                <TagIcon size={14} className="text-ink-400" />
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) bulkTagMutation.mutate({ ids: Array.from(selectedIds), tagId: e.target.value });
+                    e.target.value = "";
+                  }}
+                  defaultValue=""
+                  className="rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-700"
+                >
+                  <option value="" disabled>
+                    Adicionar etiqueta
+                  </option>
+                  {tags?.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <ArrowRightLeft size={14} className="text-ink-400" />
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) bulkStageMutation.mutate({ ids: Array.from(selectedIds), funnelStageId: e.target.value });
+                    e.target.value = "";
+                  }}
+                  defaultValue=""
+                  className="rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-700"
+                >
+                  <option value="" disabled>
+                    Mover para etapa
+                  </option>
+                  {stages?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  if (confirm(`Excluir ${selectedIds.size} cliente(s) selecionado(s)? Essa ação não pode ser desfeita.`)) {
+                    bulkDeleteMutation.mutate(Array.from(selectedIds));
+                  }
+                }}
+                loading={bulkDeleteMutation.isPending}
+              >
+                <Trash2 size={14} />
+                Excluir selecionados
+              </Button>
+              <Button variant="ghost" onClick={resetSelection}>
+                Limpar seleção
+              </Button>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <LoadingState />
@@ -113,6 +345,9 @@ export function Clientes() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
                 <tr>
+                  <th className="w-10 px-5 py-3">
+                    <input type="checkbox" checked={allOnPageSelected} onChange={togglePageSelection} className="h-4 w-4 rounded border-ink-300" />
+                  </th>
                   <th className="px-5 py-3">Nome</th>
                   <th className="px-5 py-3">Telefone</th>
                   <th className="px-5 py-3">Etapa</th>
@@ -127,6 +362,14 @@ export function Clientes() {
                     onClick={() => setSelectedClient(client)}
                     className="cursor-pointer border-b border-ink-50 last:border-0 hover:bg-ink-50"
                   >
+                    <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(client.id)}
+                        onChange={() => toggleSelect(client.id)}
+                        className="h-4 w-4 rounded border-ink-300"
+                      />
+                    </td>
                     <td className="px-5 py-3 font-medium text-ink-950">{client.name}</td>
                     <td className="px-5 py-3 text-ink-600">{client.phone}</td>
                     <td className="px-5 py-3">
@@ -211,6 +454,35 @@ export function Clientes() {
             Salvar cliente
           </Button>
         </form>
+      </Modal>
+
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Importar clientes (CSV)">
+        <div className="space-y-4">
+          <p className="text-sm text-ink-600">
+            O arquivo CSV deve conter as colunas <strong>nome</strong> e <strong>telefone</strong> (obrigatórias) e, opcionalmente,{" "}
+            <strong>email</strong>, <strong>documento</strong>, <strong>etapa</strong> e <strong>etiquetas</strong> (separadas por ; ).
+            Clientes com telefone já cadastrado são atualizados.
+          </p>
+          <Button onClick={() => fileInputRef.current?.click()} loading={importMutation.isPending} className="w-full">
+            <Upload size={16} />
+            Escolher arquivo CSV
+          </Button>
+          {importMutation.data && (
+            <div className="rounded-lg border border-ink-100 bg-ink-50 p-3 text-sm">
+              <p className="font-medium text-ink-900">
+                {importMutation.data.created} criado(s) · {importMutation.data.updated} atualizado(s)
+              </p>
+              {importMutation.data.errors.length > 0 && (
+                <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-red-600">
+                  {importMutation.data.errors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {importMutation.isError && <p className="text-sm text-red-600">{getApiErrorMessage(importMutation.error)}</p>}
+        </div>
       </Modal>
 
       {selectedClient && (

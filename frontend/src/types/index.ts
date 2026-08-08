@@ -37,6 +37,34 @@ export interface Policy {
   endDate: string | null;
 }
 
+export interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  price: string | null;
+  active: boolean;
+  createdAt: string;
+  _count?: { subscriptions: number };
+}
+
+export type ClientServiceStatus = "ATIVO" | "CANCELADO" | "INADIMPLENTE" | "VENCIDO";
+
+export interface ClientService {
+  id: string;
+  clientId: string;
+  client: { id: string; name: string; phone: string };
+  serviceId: string;
+  service: Service;
+  value: string;
+  dueDay: number;
+  paymentDate: string | null;
+  status: ClientServiceStatus;
+  startDate: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
 export interface Client {
   id: string;
   name: string;

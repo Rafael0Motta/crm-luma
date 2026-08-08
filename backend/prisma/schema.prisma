@@ -58,6 +58,7 @@ model Client {
   followUpRuns      FollowUpRun[]
   billingReminders  BillingReminder[]
   scheduledMessages ScheduledMessageRecipient[]
+  clientServices    ClientService[]
 
   @@index([funnelStageId])
   @@index([assignedUserId])
@@ -90,6 +91,52 @@ model Policy {
 
   @@index([clientId])
   @@map("policies")
+}
+
+// ============================================================
+// Servicos / Planos
+// ============================================================
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  category    String?
+  price       Decimal? @db.Decimal(10, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  subscriptions ClientService[]
+
+  @@map("services")
+}
+
+enum ClientServiceStatus {
+  ATIVO
+  CANCELADO
+  INADIMPLENTE
+  VENCIDO
+}
+
+model ClientService {
+  id          String              @id @default(cuid())
+  clientId    String              @map("client_id")
+  client      Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId   String              @map("service_id")
+  service     Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  value       Decimal             @db.Decimal(10, 2)
+  dueDay      Int                 @map("due_day")
+  paymentDate DateTime?           @map("payment_date")
+  status      ClientServiceStatus @default(ATIVO)
+  startDate   DateTime?           @map("start_date")
+  notes       String?             @db.Text
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  @@index([clientId])
+  @@index([serviceId])
+  @@map("client_services")
 }
 
 // ============================================================

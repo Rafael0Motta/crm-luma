@@ -22,6 +22,7 @@ import { aiSettingsRouter } from "./modules/ai-settings/ai-settings.routes";
 import { settingsRouter } from "./modules/settings/settings.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { eventsRouter } from "./modules/events/events.routes";
+import { servicesRouter } from "./modules/services/services.routes";
 
 export const app = express();
 
@@ -49,6 +50,7 @@ app.use("/ai-settings", aiSettingsRouter);
 app.use("/settings", settingsRouter);
 app.use("/dashboard", dashboardRouter);
 app.use("/events", eventsRouter);
+app.use("/services", servicesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

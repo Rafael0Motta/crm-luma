@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Pencil, History } from "lucide-react";
 import { api } from "../api/client";
 import { FollowUp, FollowUpRun, FollowUpStep, FollowUpTriggerConfig, FunnelStage, Tag } from "../types";
-import { PageHeader, Button, Modal, Input, Select, Label, Switch, LoadingState, EmptyState, Card, Badge } from "../components/ui";
+import { PageHeader, Button, Modal, Input, Select, Label, Switch, Textarea, LoadingState, EmptyState, Card, Badge } from "../components/ui";
 
 const TRIGGER_TYPE_LABELS: Record<FollowUpTriggerConfig["type"], string> = {
   NO_RESPONSE: "Sem resposta do cliente",
@@ -279,10 +279,11 @@ function FollowUpForm({
                   </button>
                 </div>
                 <div className="space-y-2">
-                  <Input
+                  <Textarea
                     value={step.message}
                     onChange={(e) => updateStep(i, { message: e.target.value })}
                     placeholder="Mensagem"
+                    rows={3}
                   />
                   <div className="flex items-center gap-2 text-xs text-ink-500">
                     <span>Aguardar</span>

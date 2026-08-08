@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Pencil, PlayCircle } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { Automation, AutomationAction, AutomationCondition, AutomationTrigger, Client, FunnelStage, Tag, User } from "../types";
-import { PageHeader, Button, Modal, Input, Select, Label, Switch, LoadingState, EmptyState, Card } from "../components/ui";
+import { PageHeader, Button, Modal, Input, Select, Label, Switch, Textarea, LoadingState, EmptyState, Card } from "../components/ui";
 
 const TRIGGER_LABELS: Record<AutomationTrigger, string> = {
   new_conversation: "Nova conversa iniciada",
@@ -316,7 +316,8 @@ function AutomationForm({
                 </div>
 
                 {action.type === "send_message" && (
-                  <Input
+                  <Textarea
+                    rows={3}
                     value={action.content}
                     onChange={(e) => updateAction(i, { ...action, content: e.target.value })}
                     placeholder="Mensagem a enviar"

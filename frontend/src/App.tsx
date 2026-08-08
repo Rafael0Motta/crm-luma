@@ -11,6 +11,7 @@ import { FollowUps } from "./pages/FollowUps";
 import { MensagensAgendadas } from "./pages/MensagensAgendadas";
 import { Etiquetas } from "./pages/Etiquetas";
 import { Cobranca } from "./pages/Cobranca";
+import { Servicos } from "./pages/Servicos";
 import { Usuarios } from "./pages/Usuarios";
 import { Configuracoes } from "./pages/Configuracoes";
 import { Documentacao } from "./pages/Documentacao";
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/agendadas" element={<MensagensAgendadas />} />
         <Route path="/etiquetas" element={<Etiquetas />} />
         <Route path="/cobranca" element={<Cobranca />} />
+        <Route path="/servicos" element={<Servicos />} />
         <Route path="/documentacao" element={<Documentacao />} />
         <Route
           path="/usuarios"
