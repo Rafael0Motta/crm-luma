@@ -87,8 +87,6 @@ model Policy {
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
 
-  billingReminders BillingReminder[]
-
   @@index([clientId])
   @@map("policies")
 }
@@ -133,6 +131,8 @@ model ClientService {
   notes       String?             @db.Text
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  billingReminders BillingReminder[]
 
   @@index([clientId])
   @@index([serviceId])
@@ -378,23 +378,23 @@ model ScheduledMessageRecipient {
 // ============================================================
 
 model BillingReminder {
-  id              String    @id @default(cuid())
+  id              String         @id @default(cuid())
   name            String
-  policyId        String?   @map("policy_id")
-  policy          Policy?   @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  clientId        String?   @map("client_id")
-  client          Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  dueDay          Int?      @map("due_day") // usado apenas quando clientId e informado (sem apolice vinculada)
-  daysOffset      Int       @map("days_offset") // negativo = antes do vencimento, positivo = depois
-  messageTemplate String    @db.Text @map("message_template")
-  channel         String    @default("WHATSAPP")
-  active          Boolean   @default(true)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  clientServiceId String?        @map("client_service_id")
+  clientService   ClientService? @relation(fields: [clientServiceId], references: [id], onDelete: Cascade)
+  clientId        String?        @map("client_id")
+  client          Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dueDay          Int?           @map("due_day") // usado apenas quando clientId e informado (sem servico vinculado)
+  daysOffset      Int            @map("days_offset") // negativo = antes do vencimento, positivo = depois
+  messageTemplate String         @db.Text @map("message_template")
+  channel         String         @default("WHATSAPP")
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
 
   history BillingReminderLog[]
 
-  @@index([policyId])
+  @@index([clientServiceId])
   @@index([clientId])
   @@map("billing_reminders")
 }

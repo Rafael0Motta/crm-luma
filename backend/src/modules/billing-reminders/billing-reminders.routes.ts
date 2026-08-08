@@ -16,14 +16,14 @@ const baseReminderSchema = z.object({
   messageTemplate: z.string().min(1),
   channel: z.literal("WHATSAPP").optional(),
   active: z.boolean().optional(),
-  policyId: z.string().optional(),
+  clientServiceId: z.string().optional(),
   clientId: z.string().optional(),
   dueDay: z.number().int().min(1).max(31).optional(),
 });
 
 const reminderSchema = baseReminderSchema
-  .refine((data) => Boolean(data.policyId) !== Boolean(data.clientId), {
-    message: "Informe policyId ou clientId, mas nao ambos",
+  .refine((data) => Boolean(data.clientServiceId) !== Boolean(data.clientId), {
+    message: "Informe clientServiceId ou clientId, mas nao ambos",
   })
   .refine((data) => !data.clientId || data.dueDay !== undefined, {
     message: "Informe o dia de vencimento (dueDay) para lembretes vinculados diretamente ao cliente",
@@ -34,7 +34,7 @@ billingRemindersRouter.get("/", async (_req, res) => {
   const reminders = await prisma.billingReminder.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      policy: { include: { client: { select: { id: true, name: true } } } },
+      clientService: { include: { client: { select: { id: true, name: true } }, service: true } },
       client: { select: { id: true, name: true } },
       _count: { select: { history: true } },
     },
@@ -80,20 +80,18 @@ billingRemindersRouter.delete("/:id", async (req, res) => {
 billingRemindersRouter.post("/:id/send-test", async (req, res) => {
   const reminder = await prisma.billingReminder.findUnique({
     where: { id: req.params.id },
-    include: { policy: { include: { client: true } }, client: true },
+    include: { clientService: { include: { client: true, service: true } }, client: true },
   });
   if (!reminder) throw new AppError("Lembrete nao encontrado", 404);
 
-  const client = reminder.client ?? reminder.policy?.client;
+  const client = reminder.client ?? reminder.clientService?.client;
   if (!client) throw new AppError("Lembrete sem cliente vinculado", 422);
 
   const content = renderBillingTemplate(reminder.messageTemplate, {
     clientName: client.name,
-    policyNumber: reminder.policy?.policyNumber,
-    insurer: reminder.policy?.insurer,
-    insuranceType: reminder.policy?.insuranceType,
-    value: reminder.policy ? String(reminder.policy.value) : undefined,
-    dueDay: reminder.policy?.dueDay ?? reminder.dueDay ?? undefined,
+    serviceName: reminder.clientService?.service.name,
+    value: reminder.clientService ? String(reminder.clientService.value) : undefined,
+    dueDay: reminder.clientService?.dueDay ?? reminder.dueDay ?? undefined,
   });
 
   const result = await sendTextMessage(client.phone, content);

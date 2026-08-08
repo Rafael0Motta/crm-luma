@@ -17,15 +17,13 @@ async function alreadySentToday(billingReminderId: string): Promise<boolean> {
 async function sendReminder(
   reminder: { id: string; messageTemplate: string },
   client: { name: string; phone: string },
-  policy: { policyNumber: string; insurer: string; insuranceType: string; value: any; dueDay: number } | null
+  clientService: { serviceName: string; value: any; dueDay: number } | null
 ) {
   const content = renderBillingTemplate(reminder.messageTemplate, {
     clientName: client.name,
-    policyNumber: policy?.policyNumber,
-    insurer: policy?.insurer,
-    insuranceType: policy?.insuranceType,
-    value: policy ? String(policy.value) : undefined,
-    dueDay: policy?.dueDay,
+    serviceName: clientService?.serviceName,
+    value: clientService ? String(clientService.value) : undefined,
+    dueDay: clientService?.dueDay,
   });
 
   const result = await sendTextMessage(client.phone, content);
@@ -39,7 +37,7 @@ async function processBillingReminders() {
   const reminders = await prisma.billingReminder.findMany({
     where: { active: true },
     include: {
-      policy: { include: { client: true } },
+      clientService: { include: { client: true, service: true } },
       client: true,
     },
   });
@@ -48,11 +46,15 @@ async function processBillingReminders() {
     if (await alreadySentToday(reminder.id)) continue;
 
     try {
-      if (reminder.policy) {
-        if (reminder.policy.status !== "ATIVA") continue;
-        const daysToDue = daysUntilNextDueDate(reminder.policy.dueDay, today);
+      if (reminder.clientService) {
+        if (reminder.clientService.status !== "ATIVO") continue;
+        const daysToDue = daysUntilNextDueDate(reminder.clientService.dueDay, today);
         if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
-        await sendReminder(reminder, reminder.policy.client, reminder.policy as any);
+        await sendReminder(reminder, reminder.clientService.client, {
+          serviceName: reminder.clientService.service.name,
+          value: reminder.clientService.value,
+          dueDay: reminder.clientService.dueDay,
+        });
       } else if (reminder.client && reminder.dueDay) {
         const daysToDue = daysUntilNextDueDate(reminder.dueDay, today);
         if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;

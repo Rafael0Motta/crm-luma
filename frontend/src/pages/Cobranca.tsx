@@ -2,14 +2,14 @@ import { useState, FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Send, History } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { BillingReminder, Client, Policy } from "../types";
+import { BillingReminder, Client, ClientService } from "../types";
 import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Switch, LoadingState, EmptyState, Card } from "../components/ui";
 
 export function Cobranca() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [historyId, setHistoryId] = useState<string | null>(null);
-  const [linkType, setLinkType] = useState<"policy" | "client">("policy");
+  const [linkType, setLinkType] = useState<"service" | "client">("service");
   const [error, setError] = useState<string | null>(null);
 
   const { data: reminders, isLoading } = useQuery({
@@ -19,19 +19,9 @@ export function Cobranca() {
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: async () => (await api.get<Client[]>("/clients")).data });
 
-  const { data: allPolicies } = useQuery({
-    queryKey: ["all-policies", clients?.map((c) => c.id)],
-    queryFn: async () => {
-      if (!clients) return [] as (Policy & { clientName: string })[];
-      const results = await Promise.all(
-        clients.map(async (c) => {
-          const res = await api.get<Policy[]>(`/clients/${c.id}/policies`);
-          return res.data.map((p) => ({ ...p, clientName: c.name }));
-        })
-      );
-      return results.flat();
-    },
-    enabled: Boolean(clients),
+  const { data: clientServices } = useQuery({
+    queryKey: ["client-services"],
+    queryFn: async () => (await api.get<ClientService[]>("/services/subscriptions")).data,
   });
 
   const { data: history } = useQuery({
@@ -73,8 +63,8 @@ export function Cobranca() {
       daysOffset: Number(form.get("daysOffset")),
       messageTemplate: form.get("messageTemplate"),
     };
-    if (linkType === "policy") {
-      payload.policyId = form.get("policyId");
+    if (linkType === "service") {
+      payload.clientServiceId = form.get("clientServiceId");
     } else {
       payload.clientId = form.get("clientId");
       payload.dueDay = Number(form.get("dueDay"));
@@ -86,7 +76,7 @@ export function Cobranca() {
     <div>
       <PageHeader
         title="Cobrança e lembretes"
-        subtitle="Lembretes automáticos de vencimento de apólices"
+        subtitle="Lembretes automáticos de vencimento de serviços vinculados aos clientes"
         action={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus size={16} />
@@ -107,7 +97,9 @@ export function Cobranca() {
                 <div>
                   <p className="font-medium text-ink-950">{reminder.name}</p>
                   <p className="mt-0.5 text-sm text-ink-500">
-                    {reminder.policy ? `Apólice ${reminder.policy.policyNumber} · ${reminder.policy.client.name}` : reminder.client?.name}
+                    {reminder.clientService
+                      ? `${reminder.clientService.service.name} · ${reminder.clientService.client.name}`
+                      : reminder.client?.name}
                     {" · "}
                     {reminder.daysOffset <= 0 ? `${Math.abs(reminder.daysOffset)} dia(s) antes do vencimento` : `${reminder.daysOffset} dia(s) depois`}
                   </p>
@@ -142,17 +134,17 @@ export function Cobranca() {
           </div>
           <div>
             <Label>Vincular a</Label>
-            <Select value={linkType} onChange={(e) => setLinkType(e.target.value as "policy" | "client")}>
-              <option value="policy">Apólice específica</option>
+            <Select value={linkType} onChange={(e) => setLinkType(e.target.value as "service" | "client")}>
+              <option value="service">Serviço vinculado a um cliente</option>
               <option value="client">Cliente (sem vencimento automático)</option>
             </Select>
           </div>
-          {linkType === "policy" ? (
-            <Select name="policyId" required>
-              <option value="">Selecione a apólice</option>
-              {allPolicies?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.clientName} · {p.insurer} · {p.policyNumber}
+          {linkType === "service" ? (
+            <Select name="clientServiceId" required>
+              <option value="">Selecione o vínculo</option>
+              {clientServices?.map((cs) => (
+                <option key={cs.id} value={cs.id}>
+                  {cs.client.name} · {cs.service.name}
                 </option>
               ))}
             </Select>
@@ -177,7 +169,7 @@ export function Cobranca() {
             <Input name="daysOffset" type="number" defaultValue={-3} required />
           </div>
           <div>
-            <Label>Mensagem (use {"{{nome}}"}, {"{{apolice}}"}, {"{{valor}}"}, {"{{dia_vencimento}}"})</Label>
+            <Label>Mensagem (use {"{{nome}}"}, {"{{servico}}"}, {"{{valor}}"}, {"{{dia_vencimento}}"})</Label>
             <Textarea name="messageTemplate" rows={4} required />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -180,9 +180,9 @@ export interface ScheduledMessage {
 export interface BillingReminder {
   id: string;
   name: string;
-  policyId: string | null;
+  clientServiceId: string | null;
   clientId: string | null;
-  policy?: { id: string; policyNumber: string; client: { id: string; name: string } } | null;
+  clientService?: { id: string; service: { id: string; name: string }; client: { id: string; name: string } } | null;
   client?: { id: string; name: string } | null;
   dueDay: number | null;
   daysOffset: number;
