@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Pencil, Package, Link2 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { Client, ClientService, ClientServiceStatus, Service } from "../types";
-import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Switch, Badge, LoadingState, EmptyState, Card } from "../components/ui";
+import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Switch, Badge, LoadingState, EmptyState, Card, SearchableSelect } from "../components/ui";
 
 const STATUS_LABELS: Record<ClientServiceStatus, { label: string; color: string }> = {
   ATIVO: { label: "Ativo", color: "#1B7A4C" },
@@ -333,20 +333,21 @@ function SubscriptionForm({
   error: string | null;
 }) {
   const [serviceId, setServiceId] = useState(subscription?.serviceId ?? services[0]?.id ?? "");
+  const [clientId, setClientId] = useState(subscription?.clientId ?? "");
   const selectedService = services.find((s) => s.id === serviceId) ?? subscription?.service;
+  const clientOptions = clients.map((c) => ({ value: c.id, label: `${c.name} · ${c.phone}` }));
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <Label>Cliente</Label>
-        <Select name="clientId" defaultValue={subscription?.clientId ?? ""} required>
-          <option value="">Selecione um cliente</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} · {c.phone}
-            </option>
-          ))}
-        </Select>
+        <SearchableSelect
+          name="clientId"
+          value={clientId}
+          onChange={setClientId}
+          options={clientOptions}
+          placeholder="Buscar cliente por nome ou telefone..."
+        />
       </div>
       <div>
         <Label>Serviço</Label>

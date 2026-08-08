@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, GripVertical, Settings2 } from "lucide-react";
+import { Plus, GripVertical, Settings2, Search } from "lucide-react";
 import { api } from "../api/client";
 import { Client, FunnelStage } from "../types";
 import { PageHeader, Button, Modal, Input, Badge, LoadingState, EmptyState } from "../components/ui";
@@ -10,6 +10,7 @@ export function Funil() {
   const [manageOpen, setManageOpen] = useState(false);
   const [newStageName, setNewStageName] = useState("");
   const [draggingClientId, setDraggingClientId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: stages, isLoading: loadingStages } = useQuery({
     queryKey: ["funnel-stages"],
@@ -44,8 +45,14 @@ export function Funil() {
 
   const orderedStages = [...(stages ?? [])].sort((a, b) => a.order - b.order);
 
+  const normalizedSearch = search.trim().toLowerCase();
+
   function clientsForStage(stageId: string) {
-    return (clients ?? []).filter((c) => c.funnelStageId === stageId);
+    return (clients ?? []).filter(
+      (c) =>
+        c.funnelStageId === stageId &&
+        (!normalizedSearch || c.name.toLowerCase().includes(normalizedSearch) || c.phone.includes(normalizedSearch))
+    );
   }
 
   return (
@@ -60,6 +67,18 @@ export function Funil() {
           </Button>
         }
       />
+
+      <div className="border-b border-ink-100 bg-white px-6 py-3">
+        <div className="relative max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <Input
+            placeholder="Buscar lead por nome ou telefone..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </div>
 
       <div className="flex-1 overflow-x-auto p-6">
         {orderedStages.length === 0 ? (

@@ -16,14 +16,15 @@ const baseReminderSchema = z.object({
   messageTemplate: z.string().min(1),
   channel: z.literal("WHATSAPP").optional(),
   active: z.boolean().optional(),
+  serviceId: z.string().optional(),
   clientServiceId: z.string().optional(),
   clientId: z.string().optional(),
   dueDay: z.number().int().min(1).max(31).optional(),
 });
 
 const reminderSchema = baseReminderSchema
-  .refine((data) => Boolean(data.clientServiceId) !== Boolean(data.clientId), {
-    message: "Informe clientServiceId ou clientId, mas nao ambos",
+  .refine((data) => [data.serviceId, data.clientServiceId, data.clientId].filter(Boolean).length === 1, {
+    message: "Informe exatamente um vinculo: serviceId (cobranca padrao), clientServiceId ou clientId",
   })
   .refine((data) => !data.clientId || data.dueDay !== undefined, {
     message: "Informe o dia de vencimento (dueDay) para lembretes vinculados diretamente ao cliente",
@@ -34,6 +35,7 @@ billingRemindersRouter.get("/", async (_req, res) => {
   const reminders = await prisma.billingReminder.findMany({
     orderBy: { createdAt: "desc" },
     include: {
+      service: true,
       clientService: { include: { client: { select: { id: true, name: true } }, service: true } },
       client: { select: { id: true, name: true } },
       _count: { select: { history: true } },
@@ -45,6 +47,7 @@ billingRemindersRouter.get("/", async (_req, res) => {
 billingRemindersRouter.get("/:id/history", async (req, res) => {
   const history = await prisma.billingReminderLog.findMany({
     where: { billingReminderId: req.params.id },
+    include: { client: { select: { id: true, name: true } } },
     orderBy: { sentAt: "desc" },
     take: 200,
   });
@@ -84,20 +87,41 @@ billingRemindersRouter.post("/:id/send-test", async (req, res) => {
   });
   if (!reminder) throw new AppError("Lembrete nao encontrado", 404);
 
-  const client = reminder.client ?? reminder.clientService?.client;
+  let client: { id: string; name: string; phone: string } | null = null;
+  let serviceName: string | undefined;
+  let value: string | undefined;
+  let dueDay: number | undefined;
+
+  if (reminder.serviceId) {
+    const sample = await prisma.clientService.findFirst({
+      where: { serviceId: reminder.serviceId, status: "ATIVO" },
+      include: { client: true, service: true },
+    });
+    if (!sample) throw new AppError("Nenhum cliente vinculado a este servico ainda", 422);
+    client = sample.client;
+    serviceName = sample.service.name;
+    value = String(sample.value);
+    dueDay = sample.dueDay;
+  } else {
+    client = reminder.client ?? reminder.clientService?.client ?? null;
+    serviceName = reminder.clientService?.service.name;
+    value = reminder.clientService ? String(reminder.clientService.value) : undefined;
+    dueDay = reminder.clientService?.dueDay ?? reminder.dueDay ?? undefined;
+  }
   if (!client) throw new AppError("Lembrete sem cliente vinculado", 422);
 
   const content = renderBillingTemplate(reminder.messageTemplate, {
     clientName: client.name,
-    serviceName: reminder.clientService?.service.name,
-    value: reminder.clientService ? String(reminder.clientService.value) : undefined,
-    dueDay: reminder.clientService?.dueDay ?? reminder.dueDay ?? undefined,
+    serviceName,
+    value,
+    dueDay,
   });
 
   const result = await sendTextMessage(client.phone, content);
   await prisma.billingReminderLog.create({
     data: {
       billingReminderId: reminder.id,
+      clientId: client.id,
       status: result.success ? "SENT" : "FAILED",
       errorMessage: result.errorMessage,
     },

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Send, Trash2 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { Client, FunnelStage, ScheduledMessage, Tag } from "../types";
-import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Badge, LoadingState, EmptyState, Card } from "../components/ui";
+import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Badge, LoadingState, EmptyState, Card, SearchableSelect } from "../components/ui";
 
 const STATUS_LABELS: Record<ScheduledMessage["status"], { label: string; color: string }> = {
   PENDING: { label: "Pendente", color: "#A8822E" },
@@ -24,6 +24,7 @@ export function MensagensAgendadas() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [targetType, setTargetType] = useState<ScheduledMessage["targetType"]>("TAG");
+  const [singleClientId, setSingleClientId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const { data: messages, isLoading } = useQuery({
@@ -165,14 +166,13 @@ export function MensagensAgendadas() {
           </div>
 
           {targetType === "SINGLE" && (
-            <Select name="clientId" required>
-              <option value="">Selecione o cliente</option>
-              {clients?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+            <SearchableSelect
+              name="clientId"
+              value={singleClientId}
+              onChange={setSingleClientId}
+              options={(clients ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.phone}` }))}
+              placeholder="Buscar cliente por nome ou telefone..."
+            />
           )}
           {targetType === "TAG" && (
             <Select name="tagId" required>

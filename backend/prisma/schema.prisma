@@ -57,6 +57,7 @@ model Client {
   conversations     Conversation[]
   followUpRuns      FollowUpRun[]
   billingReminders  BillingReminder[]
+  billingReminderLogs BillingReminderLog[]
   scheduledMessages ScheduledMessageRecipient[]
   clientServices    ClientService[]
 
@@ -105,7 +106,8 @@ model Service {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  subscriptions ClientService[]
+  subscriptions    ClientService[]
+  billingReminders BillingReminder[]
 
   @@map("services")
 }
@@ -380,6 +382,8 @@ model ScheduledMessageRecipient {
 model BillingReminder {
   id              String         @id @default(cuid())
   name            String
+  serviceId       String?        @map("service_id") // cobranca padrao: aplica a todo cliente vinculado a este servico
+  service         Service?       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   clientServiceId String?        @map("client_service_id")
   clientService   ClientService? @relation(fields: [clientServiceId], references: [id], onDelete: Cascade)
   clientId        String?        @map("client_id")
@@ -394,6 +398,7 @@ model BillingReminder {
 
   history BillingReminderLog[]
 
+  @@index([serviceId])
   @@index([clientServiceId])
   @@index([clientId])
   @@map("billing_reminders")
@@ -408,11 +413,14 @@ model BillingReminderLog {
   id                 String                    @id @default(cuid())
   billingReminderId  String                    @map("billing_reminder_id")
   billingReminder    BillingReminder           @relation(fields: [billingReminderId], references: [id], onDelete: Cascade)
+  clientId           String?                   @map("client_id") // qual cliente recebeu (relevante quando o lembrete e por servico/padrao)
+  client             Client?                   @relation(fields: [clientId], references: [id], onDelete: SetNull)
   status             BillingReminderLogStatus
   errorMessage       String?                   @map("error_message")
   sentAt             DateTime                  @default(now()) @map("sent_at")
 
   @@index([billingReminderId])
+  @@index([clientId])
   @@map("billing_reminder_logs")
 }
 

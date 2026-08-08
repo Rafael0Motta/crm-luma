@@ -14,9 +14,10 @@ import {
   Image as ImageIcon,
   Mic,
   UserPlus,
+  Package,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { Conversation, ConversationStatus, FunnelStage, Message, User } from "../types";
+import { Conversation, ConversationStatus, FunnelStage, Message, Service, User } from "../types";
 import { Badge, LoadingState, EmptyState, Select, Modal, Label, Input, Textarea, Button } from "../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
@@ -131,6 +132,9 @@ export function Inbox() {
   const [draft, setDraft] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [linkServiceOpen, setLinkServiceOpen] = useState(false);
+  const [linkServiceError, setLinkServiceError] = useState<string | null>(null);
+  const [linkServiceId, setLinkServiceId] = useState("");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [newConversationError, setNewConversationError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -175,6 +179,11 @@ export function Inbox() {
   const { data: funnelStages } = useQuery({
     queryKey: ["funnel-stages"],
     queryFn: async () => (await api.get<FunnelStage[]>("/funnel-stages")).data,
+  });
+
+  const { data: activeServices } = useQuery({
+    queryKey: ["services", "active"],
+    queryFn: async () => (await api.get<Service[]>("/services", { params: { active: "true" } })).data,
   });
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
@@ -261,6 +270,17 @@ export function Inbox() {
     },
   });
 
+  const linkServiceMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => api.post("/services/subscriptions", payload),
+    onSuccess: () => {
+      setLinkServiceOpen(false);
+      setLinkServiceError(null);
+      queryClient.invalidateQueries({ queryKey: ["client-services"] });
+    },
+    onError: (err) => setLinkServiceError(getApiErrorMessage(err)),
+    meta: { skipGlobalErrorToast: true },
+  });
+
   function handleSend() {
     if (!selectedId) return;
     if (pendingFile) {
@@ -281,6 +301,21 @@ export function Inbox() {
       scheduledFor: new Date(String(form.get("scheduledFor"))).toISOString(),
       targetType: "SINGLE",
       targetConfig: { clientId: selected.clientId },
+    });
+  }
+
+  function handleLinkServiceSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!selected) return;
+    const form = new FormData(e.currentTarget);
+    const paymentDate = form.get("paymentDate") as string;
+    linkServiceMutation.mutate({
+      clientId: selected.clientId,
+      serviceId: form.get("serviceId"),
+      value: Number(form.get("value")),
+      dueDay: Number(form.get("dueDay")),
+      status: form.get("status"),
+      paymentDate: paymentDate ? new Date(paymentDate).toISOString() : null,
     });
   }
 
@@ -431,6 +466,14 @@ export function Inbox() {
                   >
                     <CalendarClock size={14} />
                     Agendar
+                  </button>
+                  <button
+                    onClick={() => setLinkServiceOpen(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    title="Vincular este lead a um serviço"
+                  >
+                    <Package size={14} />
+                    Vincular serviço
                   </button>
                   <button
                     onClick={() => statusMutation.mutate("RESOLVIDA")}
@@ -588,6 +631,69 @@ export function Inbox() {
             <Button type="submit" className="w-full" loading={scheduleMutation.isPending}>
               <CalendarClock size={16} />
               Agendar mensagem
+            </Button>
+          </form>
+        </Modal>
+      )}
+
+      {selected && (
+        <Modal
+          open={linkServiceOpen}
+          onClose={() => setLinkServiceOpen(false)}
+          title={`Vincular serviço · ${selected.client?.name ?? selected.whatsappNumber}`}
+        >
+          <form onSubmit={handleLinkServiceSubmit} className="space-y-4">
+            <div>
+              <Label>Serviço</Label>
+              <Select
+                name="serviceId"
+                required
+                value={linkServiceId}
+                onChange={(e) => setLinkServiceId(e.target.value)}
+              >
+                <option value="">Selecione um serviço</option>
+                {activeServices?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Valor (R$)</Label>
+                <Input
+                  key={linkServiceId}
+                  name="value"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  defaultValue={activeServices?.find((s) => s.id === linkServiceId)?.price ?? ""}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Dia de vencimento</Label>
+                <Input name="dueDay" type="number" min={1} max={31} defaultValue={10} required />
+              </div>
+            </div>
+            <div>
+              <Label>Data de pagamento (opcional)</Label>
+              <Input name="paymentDate" type="date" />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select name="status" defaultValue="ATIVO">
+                <option value="ATIVO">Ativo</option>
+                <option value="INADIMPLENTE">Inadimplente</option>
+                <option value="VENCIDO">Vencido</option>
+                <option value="CANCELADO">Cancelado</option>
+              </Select>
+            </div>
+            {linkServiceError && <p className="text-sm text-red-600">{linkServiceError}</p>}
+            <Button type="submit" className="w-full" loading={linkServiceMutation.isPending}>
+              <Package size={16} />
+              Vincular serviço ao lead
             </Button>
           </form>
         </Modal>

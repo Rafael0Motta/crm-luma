@@ -6,30 +6,53 @@ import { sendTextMessage } from "../services/evolution";
 import { renderBillingTemplate } from "../services/billingTemplate";
 import { daysUntilNextDueDate, offsetMatches, startOfDay } from "../services/billingSchedule";
 
-async function alreadySentToday(billingReminderId: string): Promise<boolean> {
+async function alreadySentToday(billingReminderId: string, clientId: string | null): Promise<boolean> {
   const todayStart = startOfDay(new Date());
   const log = await prisma.billingReminderLog.findFirst({
-    where: { billingReminderId, sentAt: { gte: todayStart } },
+    where: { billingReminderId, sentAt: { gte: todayStart }, ...(clientId ? { clientId } : {}) },
   });
   return Boolean(log);
 }
 
 async function sendReminder(
   reminder: { id: string; messageTemplate: string },
-  client: { name: string; phone: string },
-  clientService: { serviceName: string; value: any; dueDay: number } | null
+  client: { id: string; name: string; phone: string },
+  serviceInfo: { serviceName: string; value: any; dueDay: number } | null
 ) {
   const content = renderBillingTemplate(reminder.messageTemplate, {
     clientName: client.name,
-    serviceName: clientService?.serviceName,
-    value: clientService ? String(clientService.value) : undefined,
-    dueDay: clientService?.dueDay,
+    serviceName: serviceInfo?.serviceName,
+    value: serviceInfo ? String(serviceInfo.value) : undefined,
+    dueDay: serviceInfo?.dueDay,
   });
 
   const result = await sendTextMessage(client.phone, content);
   await prisma.billingReminderLog.create({
-    data: { billingReminderId: reminder.id, status: result.success ? "SENT" : "FAILED", errorMessage: result.errorMessage },
+    data: {
+      billingReminderId: reminder.id,
+      clientId: client.id,
+      status: result.success ? "SENT" : "FAILED",
+      errorMessage: result.errorMessage,
+    },
   });
+}
+
+async function processStandardServiceReminder(reminder: { id: string; serviceId: string; messageTemplate: string; daysOffset: number }, today: Date) {
+  const subscriptions = await prisma.clientService.findMany({
+    where: { serviceId: reminder.serviceId, status: "ATIVO" },
+    include: { client: true, service: true },
+  });
+
+  for (const sub of subscriptions) {
+    try {
+      if (await alreadySentToday(reminder.id, sub.clientId)) continue;
+      const daysToDue = daysUntilNextDueDate(sub.dueDay, today);
+      if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
+      await sendReminder(reminder, sub.client, { serviceName: sub.service.name, value: sub.value, dueDay: sub.dueDay });
+    } catch (err) {
+      logger.error({ err, reminderId: reminder.id, clientId: sub.clientId }, "Falha ao enviar lembrete de cobranca padrao");
+    }
+  }
 }
 
 async function processBillingReminders() {
@@ -43,11 +66,12 @@ async function processBillingReminders() {
   });
 
   for (const reminder of reminders) {
-    if (await alreadySentToday(reminder.id)) continue;
-
     try {
-      if (reminder.clientService) {
+      if (reminder.serviceId) {
+        await processStandardServiceReminder(reminder as any, today);
+      } else if (reminder.clientService) {
         if (reminder.clientService.status !== "ATIVO") continue;
+        if (await alreadySentToday(reminder.id, reminder.clientService.clientId)) continue;
         const daysToDue = daysUntilNextDueDate(reminder.clientService.dueDay, today);
         if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
         await sendReminder(reminder, reminder.clientService.client, {
@@ -56,6 +80,7 @@ async function processBillingReminders() {
           dueDay: reminder.clientService.dueDay,
         });
       } else if (reminder.client && reminder.dueDay) {
+        if (await alreadySentToday(reminder.id, reminder.clientId)) continue;
         const daysToDue = daysUntilNextDueDate(reminder.dueDay, today);
         if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
         await sendReminder(reminder, reminder.client, null);

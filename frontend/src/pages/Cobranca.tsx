@@ -2,14 +2,17 @@ import { useState, FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Send, History } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { BillingReminder, Client, ClientService } from "../types";
-import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Switch, LoadingState, EmptyState, Card } from "../components/ui";
+import { BillingReminder, Client, ClientService, Service } from "../types";
+import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Switch, LoadingState, EmptyState, Card, SearchableSelect } from "../components/ui";
+
+type LinkType = "servicePadrao" | "clientService" | "client";
 
 export function Cobranca() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [historyId, setHistoryId] = useState<string | null>(null);
-  const [linkType, setLinkType] = useState<"service" | "client">("service");
+  const [linkType, setLinkType] = useState<LinkType>("servicePadrao");
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const { data: reminders, isLoading } = useQuery({
@@ -18,6 +21,11 @@ export function Cobranca() {
   });
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: async () => (await api.get<Client[]>("/clients")).data });
+
+  const { data: services } = useQuery({
+    queryKey: ["services", "active"],
+    queryFn: async () => (await api.get<Service[]>("/services", { params: { active: "true" } })).data,
+  });
 
   const { data: clientServices } = useQuery({
     queryKey: ["client-services"],
@@ -35,6 +43,7 @@ export function Cobranca() {
     onSuccess: () => {
       setCreateOpen(false);
       setError(null);
+      setSelectedClientId("");
       queryClient.invalidateQueries({ queryKey: ["billing-reminders"] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -63,7 +72,9 @@ export function Cobranca() {
       daysOffset: Number(form.get("daysOffset")),
       messageTemplate: form.get("messageTemplate"),
     };
-    if (linkType === "service") {
+    if (linkType === "servicePadrao") {
+      payload.serviceId = form.get("serviceId");
+    } else if (linkType === "clientService") {
       payload.clientServiceId = form.get("clientServiceId");
     } else {
       payload.clientId = form.get("clientId");
@@ -71,6 +82,8 @@ export function Cobranca() {
     }
     createMutation.mutate(payload);
   }
+
+  const clientOptions = (clients ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.phone}` }));
 
   return (
     <div>
@@ -97,7 +110,9 @@ export function Cobranca() {
                 <div>
                   <p className="font-medium text-ink-950">{reminder.name}</p>
                   <p className="mt-0.5 text-sm text-ink-500">
-                    {reminder.clientService
+                    {reminder.service
+                      ? `Padrão · ${reminder.service.name} (todos os clientes vinculados)`
+                      : reminder.clientService
                       ? `${reminder.clientService.service.name} · ${reminder.clientService.client.name}`
                       : reminder.client?.name}
                     {" · "}
@@ -134,12 +149,30 @@ export function Cobranca() {
           </div>
           <div>
             <Label>Vincular a</Label>
-            <Select value={linkType} onChange={(e) => setLinkType(e.target.value as "service" | "client")}>
-              <option value="service">Serviço vinculado a um cliente</option>
-              <option value="client">Cliente (sem vencimento automático)</option>
+            <Select value={linkType} onChange={(e) => setLinkType(e.target.value as LinkType)}>
+              <option value="servicePadrao">Serviço (padrão para todo cliente vinculado)</option>
+              <option value="clientService">Vínculo específico (um cliente + serviço)</option>
+              <option value="client">Cliente direto (sem serviço vinculado)</option>
             </Select>
           </div>
-          {linkType === "service" ? (
+
+          {linkType === "servicePadrao" && (
+            <div>
+              <Select name="serviceId" required>
+                <option value="">Selecione o serviço</option>
+                {services?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1.5 text-xs text-ink-500">
+                Este lembrete é enviado automaticamente para todo cliente vinculado a este serviço, usando o dia de vencimento de cada um.
+              </p>
+            </div>
+          )}
+
+          {linkType === "clientService" && (
             <Select name="clientServiceId" required>
               <option value="">Selecione o vínculo</option>
               {clientServices?.map((cs) => (
@@ -148,22 +181,24 @@ export function Cobranca() {
                 </option>
               ))}
             </Select>
-          ) : (
-            <Select name="clientId" required>
-              <option value="">Selecione o cliente</option>
-              {clients?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
           )}
+
           {linkType === "client" && (
-            <div>
-              <Label>Dia do mês do vencimento</Label>
-              <Input name="dueDay" type="number" min={1} max={31} required />
-            </div>
+            <>
+              <SearchableSelect
+                name="clientId"
+                value={selectedClientId}
+                onChange={setSelectedClientId}
+                options={clientOptions}
+                placeholder="Buscar cliente por nome ou telefone..."
+              />
+              <div>
+                <Label>Dia do mês do vencimento</Label>
+                <Input name="dueDay" type="number" min={1} max={31} required />
+              </div>
+            </>
           )}
+
           <div>
             <Label>Dias em relação ao vencimento (negativo = antes, positivo = depois)</Label>
             <Input name="daysOffset" type="number" defaultValue={-3} required />
@@ -182,9 +217,10 @@ export function Cobranca() {
       <Modal open={Boolean(historyId)} onClose={() => setHistoryId(null)} title="Histórico de envios">
         <div className="space-y-2">
           {history?.length === 0 && <p className="text-sm text-ink-400">Nenhum envio registrado ainda.</p>}
-          {history?.map((log: { id: string; status: string; sentAt: string; errorMessage: string | null }) => (
+          {history?.map((log: { id: string; status: string; sentAt: string; errorMessage: string | null; client?: { name: string } | null }) => (
             <div key={log.id} className="flex items-center justify-between rounded-lg border border-ink-100 px-3 py-2 text-sm">
               <span className={log.status === "SENT" ? "text-ink-800" : "text-red-600"}>
+                {log.client ? `${log.client.name} · ` : ""}
                 {log.status === "SENT" ? "Enviado" : `Falhou: ${log.errorMessage ?? ""}`}
               </span>
               <span className="text-xs text-ink-400">{new Date(log.sentAt).toLocaleString("pt-BR")}</span>

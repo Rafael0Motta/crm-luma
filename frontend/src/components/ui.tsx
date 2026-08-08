@@ -1,5 +1,5 @@
-import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { Loader2, X } from "lucide-react";
+import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, useEffect, useRef, useState } from "react";
+import { Loader2, Search, X } from "lucide-react";
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
@@ -127,6 +127,86 @@ export function LoadingState() {
   return (
     <div className="flex items-center justify-center py-16">
       <Loader2 className="animate-spin text-ink-400" size={24} />
+    </div>
+  );
+}
+
+export function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder = "Buscar...",
+  name,
+  required,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  name?: string;
+  required?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selected = options.find((o) => o.value === value);
+  const filtered = query ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase())) : options;
+
+  return (
+    <div ref={containerRef} className="relative">
+      {name && <input type="hidden" name={name} value={value} required={required} />}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-lg border border-ink-200 bg-white px-3 py-2 text-left text-sm text-ink-950 focus:border-ink-500 focus:outline-none focus:ring-2 focus:ring-ink-100"
+      >
+        <span className={selected ? "" : "text-ink-400"}>{selected ? selected.label : placeholder}</span>
+        <Search size={14} className="flex-shrink-0 text-ink-400" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded-lg border border-ink-200 bg-white shadow-lg">
+          <div className="border-b border-ink-100 p-2">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={placeholder}
+              className="w-full rounded-md border border-ink-200 px-2 py-1.5 text-sm focus:border-ink-500 focus:outline-none"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-ink-400">Nenhum resultado</p>}
+            {filtered.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className={`block w-full truncate px-3 py-1.5 text-left text-sm hover:bg-ink-50 ${
+                  o.value === value ? "bg-ink-100 font-medium text-ink-900" : "text-ink-700"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

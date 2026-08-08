@@ -180,8 +180,10 @@ export interface ScheduledMessage {
 export interface BillingReminder {
   id: string;
   name: string;
+  serviceId: string | null;
   clientServiceId: string | null;
   clientId: string | null;
+  service?: { id: string; name: string } | null;
   clientService?: { id: string; service: { id: string; name: string }; client: { id: string; name: string } } | null;
   client?: { id: string; name: string } | null;
   dueDay: number | null;
@@ -226,8 +228,17 @@ export interface Paginated<T> {
 export interface DashboardMetrics {
   openConversations: number;
   pendingConversations: number;
+  totalClients: number;
   newClientsThisMonth: number;
   clientsByStage: { id: string; name: string; color: string; count: number }[];
   responseRate: number;
   billingRemindersFailedThisMonth: number;
+  billingRemindersSentThisMonth: number;
+  monthlyRecurringRevenue: number;
+  activeSubscriptions: number;
+  overdueSubscriptions: number;
+  upcomingDuesNext7Days: number;
+  pendingFollowUps: number;
+  pendingScheduledMessages: number;
+  topServices: { id: string; name: string; count: number }[];
 }
