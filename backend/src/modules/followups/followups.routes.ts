@@ -14,7 +14,7 @@ const stepSchema = z.object({
 });
 
 const triggerConfigSchema = z.union([
-  z.object({ type: z.literal("NO_RESPONSE"), hours: z.number().positive() }),
+  z.object({ type: z.literal("NO_RESPONSE"), amount: z.number().positive(), unit: z.enum(["minutes", "hours", "days"]) }),
   z.object({ type: z.literal("STUCK_IN_STAGE"), funnelStageId: z.string(), days: z.number().positive() }),
   z.object({ type: z.literal("AFTER_TAG"), tagId: z.string() }),
 ]);

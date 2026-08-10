@@ -176,13 +176,13 @@ const SECTIONS: Section[] = [
     icon: Users,
     content: (
       <div className="space-y-4">
-        <P>Cadastro completo dos clientes (segurados), com apólices e etiquetas.</P>
+        <P>Cadastro completo dos clientes, com serviços vinculados e etiquetas.</P>
         <Steps
           items={[
             'Clique em "Novo cliente" para cadastrar manualmente (nome, telefone, e-mail, documento, etapa do funil, atendente responsável).',
-            "Clique em um cliente na lista para ver a ficha completa, editar os dados, adicionar/remover etiquetas e cadastrar apólices.",
-            'Dentro da ficha do cliente, use "Nova apólice" para registrar seguro, seguradora, número, valor e dia de vencimento.',
-            "Use o campo de busca no topo da lista para encontrar clientes por nome, telefone, e-mail ou documento.",
+            "Clique em um cliente na lista para ver a ficha completa, editar os dados, adicionar/remover etiquetas e vincular serviços.",
+            'Dentro da ficha do cliente, use "Novo vínculo" para associar um serviço do catálogo, com valor, dia de vencimento e data de pagamento.',
+            "Use o campo de busca e os filtros por etapa/etiqueta/atendente no topo da lista para encontrar clientes rapidamente. Também é possível selecionar vários clientes de uma vez para excluir, etiquetar ou mover de etapa em lote, e importar/exportar a lista em CSV.",
           ]}
         />
       </div>
@@ -261,14 +261,16 @@ const SECTIONS: Section[] = [
     icon: Receipt,
     content: (
       <div className="space-y-4">
-        <P>Lembretes automáticos de vencimento de apólices, enviados por WhatsApp.</P>
+        <P>Lembretes automáticos de vencimento de serviços vinculados aos clientes, enviados por WhatsApp.</P>
         <Steps
           items={[
-            "Crie um lembrete vinculado a uma apólice específica (usa o dia de vencimento cadastrado nela) ou direto a um cliente (informando o dia do vencimento manualmente).",
+            'Crie um lembrete "padrão para todo cliente vinculado" a um serviço — ele passa a valer automaticamente para qualquer cliente atual ou futuro que tiver aquele serviço.',
+            "Ou vincule o lembrete a um serviço específico de um cliente (um vínculo já existente), ou direto a um cliente sem serviço (informando o dia do vencimento manualmente).",
             "Defina quantos dias antes ou depois do vencimento o lembrete deve ser disparado.",
-            "Escreva a mensagem usando variáveis como {{nome}}, {{apolice}}, {{valor}} e {{dia_vencimento}} — elas são substituídas automaticamente.",
+            "Escreva a mensagem usando variáveis como {{nome}}, {{servico}}, {{valor}} e {{dia_vencimento}} — elas são substituídas automaticamente.",
             'Use "enviar teste" para conferir como a mensagem fica antes de deixar o lembrete ativo.',
             "Consulte o histórico de envios de cada lembrete pelo ícone de relógio.",
+            "Também é possível criar um lembrete de cobrança direto pelo chat de um lead, pelo botão \"Criar cobrança\" no cabeçalho da conversa.",
           ]}
         />
       </div>

@@ -2,6 +2,7 @@ import { useState, FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Send, History } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
+import { toastError, toastSuccess } from "../components/Toast";
 import { BillingReminder, Client, ClientService, Service } from "../types";
 import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Switch, LoadingState, EmptyState, Card, SearchableSelect } from "../components/ui";
 
@@ -61,7 +62,10 @@ export function Cobranca() {
   });
 
   const testMutation = useMutation({
-    mutationFn: async (id: string) => api.post(`/billing-reminders/${id}/send-test`),
+    mutationFn: async (id: string) => (await api.post<{ sent: boolean; content: string }>(`/billing-reminders/${id}/send-test`)).data,
+    onSuccess: (data) => toastSuccess(`Teste enviado! Mensagem: "${data.content}"`),
+    onError: (err) => toastError(`Falha ao enviar teste: ${getApiErrorMessage(err)}`),
+    meta: { skipGlobalErrorToast: true },
   });
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {

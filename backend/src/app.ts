@@ -9,7 +9,7 @@ import { UPLOADS_DIR } from "./services/mediaStorage";
 
 import { authRouter } from "./modules/auth/auth.routes";
 import { usersRouter } from "./modules/users/users.routes";
-import { clientsRouter, policiesRouter } from "./modules/clients/clients.routes";
+import { clientsRouter } from "./modules/clients/clients.routes";
 import { tagsRouter } from "./modules/tags/tags.routes";
 import { funnelStagesRouter } from "./modules/funnel-stages/funnel-stages.routes";
 import { conversationsRouter } from "./modules/conversations/conversations.routes";
@@ -37,7 +37,6 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);
 app.use("/clients", clientsRouter);
-app.use("/policies", policiesRouter);
 app.use("/tags", tagsRouter);
 app.use("/funnel-stages", funnelStagesRouter);
 app.use("/conversations", conversationsRouter);

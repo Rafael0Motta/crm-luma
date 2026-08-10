@@ -18,8 +18,14 @@ const RUN_STATUS_LABELS: Record<FollowUpRun["status"], { label: string; color: s
   FAILED: { label: "Falhou", color: "#8A2B2B" },
 };
 
+const TIME_UNIT_LABELS: Record<"minutes" | "hours" | "days", string> = {
+  minutes: "minutos",
+  hours: "horas",
+  days: "dias",
+};
+
 function defaultTriggerConfig(type: FollowUpTriggerConfig["type"], stages: FunnelStage[], tags: Tag[]): FollowUpTriggerConfig {
-  if (type === "NO_RESPONSE") return { type, hours: 24 };
+  if (type === "NO_RESPONSE") return { type, amount: 24, unit: "hours" };
   if (type === "STUCK_IN_STAGE") return { type, funnelStageId: stages[0]?.id ?? "", days: 3 };
   return { type, tagId: tags[0]?.id ?? "" };
 }
@@ -208,13 +214,26 @@ function FollowUpForm({
 
         {triggerConfig.type === "NO_RESPONSE" && (
           <div>
-            <Label>Horas sem resposta do cliente</Label>
-            <Input
-              type="number"
-              min={1}
-              value={triggerConfig.hours}
-              onChange={(e) => setTriggerConfig({ type: "NO_RESPONSE", hours: Number(e.target.value) })}
-            />
+            <Label>Tempo sem resposta do cliente</Label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min={1}
+                value={triggerConfig.amount}
+                onChange={(e) => setTriggerConfig({ ...triggerConfig, amount: Number(e.target.value) })}
+                className="!w-28"
+              />
+              <Select
+                value={triggerConfig.unit}
+                onChange={(e) => setTriggerConfig({ ...triggerConfig, unit: e.target.value as "minutes" | "hours" | "days" })}
+              >
+                {Object.entries(TIME_UNIT_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         )}
 

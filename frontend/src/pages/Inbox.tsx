@@ -15,9 +15,10 @@ import {
   Mic,
   UserPlus,
   Package,
+  Receipt,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { Conversation, ConversationStatus, FunnelStage, Message, Service, User } from "../types";
+import { ClientService, Conversation, ConversationStatus, FunnelStage, Message, Service, User } from "../types";
 import { Badge, LoadingState, EmptyState, Select, Modal, Label, Input, Textarea, Button } from "../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
@@ -135,6 +136,9 @@ export function Inbox() {
   const [linkServiceOpen, setLinkServiceOpen] = useState(false);
   const [linkServiceError, setLinkServiceError] = useState<string | null>(null);
   const [linkServiceId, setLinkServiceId] = useState("");
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingLinkType, setBillingLinkType] = useState<"clientService" | "client">("clientService");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [newConversationError, setNewConversationError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -187,6 +191,12 @@ export function Inbox() {
   });
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
+
+  const { data: clientServiceLinks } = useQuery({
+    queryKey: ["client-services", selected?.clientId],
+    queryFn: async () => (await api.get<ClientService[]>("/services/subscriptions", { params: { clientId: selected?.clientId } })).data,
+    enabled: Boolean(selected?.clientId) && billingOpen,
+  });
 
   const { data: messages } = useQuery({
     queryKey: ["messages", selectedId],
@@ -281,6 +291,17 @@ export function Inbox() {
     meta: { skipGlobalErrorToast: true },
   });
 
+  const billingReminderMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => api.post("/billing-reminders", payload),
+    onSuccess: () => {
+      setBillingOpen(false);
+      setBillingError(null);
+      queryClient.invalidateQueries({ queryKey: ["billing-reminders"] });
+    },
+    onError: (err) => setBillingError(getApiErrorMessage(err)),
+    meta: { skipGlobalErrorToast: true },
+  });
+
   function handleSend() {
     if (!selectedId) return;
     if (pendingFile) {
@@ -317,6 +338,24 @@ export function Inbox() {
       status: form.get("status"),
       paymentDate: paymentDate ? new Date(paymentDate).toISOString() : null,
     });
+  }
+
+  function handleBillingSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!selected) return;
+    const form = new FormData(e.currentTarget);
+    const payload: Record<string, unknown> = {
+      name: form.get("name"),
+      daysOffset: Number(form.get("daysOffset")),
+      messageTemplate: form.get("messageTemplate"),
+    };
+    if (billingLinkType === "clientService") {
+      payload.clientServiceId = form.get("clientServiceId");
+    } else {
+      payload.clientId = selected.clientId;
+      payload.dueDay = Number(form.get("dueDay"));
+    }
+    billingReminderMutation.mutate(payload);
   }
 
   function handleNewConversationSubmit(e: FormEvent<HTMLFormElement>) {
@@ -474,6 +513,14 @@ export function Inbox() {
                   >
                     <Package size={14} />
                     Vincular serviço
+                  </button>
+                  <button
+                    onClick={() => setBillingOpen(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    title="Criar lembrete de cobrança para este lead"
+                  >
+                    <Receipt size={14} />
+                    Criar cobrança
                   </button>
                   <button
                     onClick={() => statusMutation.mutate("RESOLVIDA")}
@@ -694,6 +741,61 @@ export function Inbox() {
             <Button type="submit" className="w-full" loading={linkServiceMutation.isPending}>
               <Package size={16} />
               Vincular serviço ao lead
+            </Button>
+          </form>
+        </Modal>
+      )}
+
+      {selected && (
+        <Modal open={billingOpen} onClose={() => setBillingOpen(false)} title={`Criar cobrança · ${selected.client?.name ?? selected.whatsappNumber}`}>
+          <form onSubmit={handleBillingSubmit} className="space-y-4">
+            <div>
+              <Label>Nome interno do lembrete</Label>
+              <Input name="name" required placeholder="Ex: Cobrança plano saúde" />
+            </div>
+            <div>
+              <Label>Vincular a</Label>
+              <Select value={billingLinkType} onChange={(e) => setBillingLinkType(e.target.value as "clientService" | "client")}>
+                <option value="clientService">Serviço já vinculado a este lead</option>
+                <option value="client">Cliente direto (informar dia de vencimento)</option>
+              </Select>
+            </div>
+            {billingLinkType === "clientService" ? (
+              <div>
+                <Select name="clientServiceId" required disabled={!clientServiceLinks?.length}>
+                  <option value="">Selecione o serviço vinculado</option>
+                  {clientServiceLinks?.map((cs) => (
+                    <option key={cs.id} value={cs.id}>
+                      {cs.service.name} · vencimento dia {cs.dueDay}
+                    </option>
+                  ))}
+                </Select>
+                {clientServiceLinks?.length === 0 && (
+                  <p className="mt-1.5 text-xs text-ink-500">
+                    Este lead ainda não tem serviço vinculado. Use "Vincular serviço" primeiro ou escolha "Cliente direto".
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <Label>Dia do mês do vencimento</Label>
+                <Input name="dueDay" type="number" min={1} max={31} required />
+              </div>
+            )}
+            <div>
+              <Label>Dias em relação ao vencimento (negativo = antes, positivo = depois)</Label>
+              <Input name="daysOffset" type="number" defaultValue={-3} required />
+            </div>
+            <div>
+              <Label>
+                Mensagem (use {"{{nome}}"}, {"{{servico}}"}, {"{{valor}}"}, {"{{dia_vencimento}}"})
+              </Label>
+              <Textarea name="messageTemplate" rows={4} required />
+            </div>
+            {billingError && <p className="text-sm text-red-600">{billingError}</p>}
+            <Button type="submit" className="w-full" loading={billingReminderMutation.isPending}>
+              <Receipt size={16} />
+              Criar lembrete de cobrança
             </Button>
           </form>
         </Modal>

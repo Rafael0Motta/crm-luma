@@ -53,7 +53,6 @@ model Client {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   tags              ClientTag[]
-  policies          Policy[]
   conversations     Conversation[]
   followUpRuns      FollowUpRun[]
   billingReminders  BillingReminder[]
@@ -64,32 +63,6 @@ model Client {
   @@index([funnelStageId])
   @@index([assignedUserId])
   @@map("clients")
-}
-
-enum PolicyStatus {
-  ATIVA
-  CANCELADA
-  INADIMPLENTE
-  VENCIDA
-}
-
-model Policy {
-  id            String       @id @default(cuid())
-  clientId      String       @map("client_id")
-  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  insuranceType String       @map("insurance_type")
-  insurer       String
-  policyNumber  String       @map("policy_number")
-  value         Decimal      @db.Decimal(10, 2)
-  dueDay        Int          @map("due_day")
-  status        PolicyStatus @default(ATIVA)
-  startDate     DateTime?    @map("start_date")
-  endDate       DateTime?    @map("end_date")
-  createdAt     DateTime     @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @map("updated_at")
-
-  @@index([clientId])
-  @@map("policies")
 }
 
 // ============================================================

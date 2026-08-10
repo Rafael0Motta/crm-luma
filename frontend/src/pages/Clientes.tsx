@@ -1,8 +1,8 @@
 import { useState, FormEvent, useRef, ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ShieldPlus, Pencil, X, Check, Upload, Download, Tag as TagIcon, ArrowRightLeft } from "lucide-react";
+import { Plus, Search, Trash2, Package, Pencil, X, Check, Upload, Download, Tag as TagIcon, ArrowRightLeft } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { Client, FunnelStage, Paginated, Policy, Tag, User } from "../types";
+import { Client, ClientService, FunnelStage, Paginated, Service, Tag, User } from "../types";
 import { PageHeader, Button, Modal, Input, Select, Label, Badge, LoadingState, EmptyState, Card } from "../components/ui";
 
 const PAGE_SIZE = 20;
@@ -515,8 +515,8 @@ function ClientDetail({
   onDelete: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [addingPolicy, setAddingPolicy] = useState(false);
-  const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
+  const [addingService, setAddingService] = useState(false);
+  const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState(false);
 
   const { data: fresh } = useQuery({
@@ -525,9 +525,14 @@ function ClientDetail({
     initialData: client,
   });
 
-  const { data: policies } = useQuery({
-    queryKey: ["policies", client.id],
-    queryFn: async () => (await api.get<Policy[]>(`/clients/${client.id}/policies`)).data,
+  const { data: subscriptions } = useQuery({
+    queryKey: ["client-services", client.id],
+    queryFn: async () => (await api.get<ClientService[]>("/services/subscriptions", { params: { clientId: client.id } })).data,
+  });
+
+  const { data: catalogServices } = useQuery({
+    queryKey: ["services", "active"],
+    queryFn: async () => (await api.get<Service[]>("/services", { params: { active: "true" } })).data,
   });
 
   const addTagMutation = useMutation({
@@ -549,50 +554,50 @@ function ClientDetail({
     },
   });
 
-  const addPolicyMutation = useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => api.post(`/clients/${client.id}/policies`, payload),
+  const addSubscriptionMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => api.post("/services/subscriptions", payload),
     onSuccess: () => {
-      setAddingPolicy(false);
-      queryClient.invalidateQueries({ queryKey: ["policies", client.id] });
+      setAddingService(false);
+      queryClient.invalidateQueries({ queryKey: ["client-services", client.id] });
     },
   });
 
-  const updatePolicyMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: Record<string, unknown> }) => api.put(`/policies/${id}`, payload),
+  const updateSubscriptionMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: Record<string, unknown> }) => api.put(`/services/subscriptions/${id}`, payload),
     onSuccess: () => {
-      setEditingPolicyId(null);
-      queryClient.invalidateQueries({ queryKey: ["policies", client.id] });
+      setEditingSubscriptionId(null);
+      queryClient.invalidateQueries({ queryKey: ["client-services", client.id] });
     },
   });
 
-  const deletePolicyMutation = useMutation({
-    mutationFn: async (id: string) => api.delete(`/policies/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["policies", client.id] }),
+  const deleteSubscriptionMutation = useMutation({
+    mutationFn: async (id: string) => api.delete(`/services/subscriptions/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["client-services", client.id] }),
   });
 
-  function handleAddPolicy(e: FormEvent<HTMLFormElement>) {
+  function handleAddSubscription(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    addPolicyMutation.mutate({
-      insuranceType: form.get("insuranceType"),
-      insurer: form.get("insurer"),
-      policyNumber: form.get("policyNumber"),
+    const paymentDate = form.get("paymentDate") as string;
+    addSubscriptionMutation.mutate({
+      clientId: client.id,
+      serviceId: form.get("serviceId"),
       value: Number(form.get("value")),
       dueDay: Number(form.get("dueDay")),
+      paymentDate: paymentDate ? new Date(paymentDate).toISOString() : null,
     });
   }
 
-  function handleUpdatePolicy(e: FormEvent<HTMLFormElement>, id: string) {
+  function handleUpdateSubscription(e: FormEvent<HTMLFormElement>, id: string) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    updatePolicyMutation.mutate({
+    const paymentDate = form.get("paymentDate") as string;
+    updateSubscriptionMutation.mutate({
       id,
       payload: {
-        insuranceType: form.get("insuranceType"),
-        insurer: form.get("insurer"),
-        policyNumber: form.get("policyNumber"),
         value: Number(form.get("value")),
         dueDay: Number(form.get("dueDay")),
+        paymentDate: paymentDate ? new Date(paymentDate).toISOString() : null,
         status: form.get("status"),
       },
     });
@@ -703,73 +708,77 @@ function ClientDetail({
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Apólices</p>
-            <button onClick={() => setAddingPolicy((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-ink-700 hover:underline">
-              <ShieldPlus size={14} />
-              Nova apólice
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Serviços vinculados</p>
+            <button onClick={() => setAddingService((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-ink-700 hover:underline">
+              <Package size={14} />
+              Novo vínculo
             </button>
           </div>
 
-          {addingPolicy && (
-            <form onSubmit={handleAddPolicy} className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-ink-100 p-3">
-              <Input name="insuranceType" placeholder="Tipo de seguro" required />
-              <Input name="insurer" placeholder="Seguradora" required />
-              <Input name="policyNumber" placeholder="Número da apólice" required />
-              <Input name="value" type="number" step="0.01" placeholder="Valor" required />
+          {addingService && (
+            <form onSubmit={handleAddSubscription} className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-ink-100 p-3">
+              <Select name="serviceId" required className="col-span-2">
+                <option value="">Selecione um serviço</option>
+                {catalogServices?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+              <Input name="value" type="number" step="0.01" min={0} placeholder="Valor (R$)" required />
               <Input name="dueDay" type="number" min={1} max={31} placeholder="Dia de vencimento" required />
-              <Button type="submit" className="col-span-2" loading={addPolicyMutation.isPending}>
-                Salvar apólice
+              <Input name="paymentDate" type="date" className="col-span-2" />
+              <Button type="submit" className="col-span-2" loading={addSubscriptionMutation.isPending}>
+                Salvar vínculo
               </Button>
             </form>
           )}
 
           <div className="space-y-2">
-            {policies?.length === 0 && <p className="text-sm text-ink-400">Nenhuma apólice cadastrada.</p>}
-            {policies?.map((policy) =>
-              editingPolicyId === policy.id ? (
+            {subscriptions?.length === 0 && <p className="text-sm text-ink-400">Nenhum serviço vinculado ainda.</p>}
+            {subscriptions?.map((sub) =>
+              editingSubscriptionId === sub.id ? (
                 <form
-                  key={policy.id}
-                  onSubmit={(e) => handleUpdatePolicy(e, policy.id)}
+                  key={sub.id}
+                  onSubmit={(e) => handleUpdateSubscription(e, sub.id)}
                   className="grid grid-cols-2 gap-2 rounded-lg border border-ink-100 p-3"
                 >
-                  <Input name="insuranceType" defaultValue={policy.insuranceType} placeholder="Tipo de seguro" required />
-                  <Input name="insurer" defaultValue={policy.insurer} placeholder="Seguradora" required />
-                  <Input name="policyNumber" defaultValue={policy.policyNumber} placeholder="Número da apólice" required />
-                  <Input name="value" type="number" step="0.01" defaultValue={policy.value} placeholder="Valor" required />
-                  <Input name="dueDay" type="number" min={1} max={31} defaultValue={policy.dueDay} placeholder="Dia de vencimento" required />
-                  <Select name="status" defaultValue={policy.status}>
-                    <option value="ATIVA">Ativa</option>
-                    <option value="CANCELADA">Cancelada</option>
+                  <p className="col-span-2 text-sm font-medium text-ink-900">{sub.service.name}</p>
+                  <Input name="value" type="number" step="0.01" defaultValue={sub.value} placeholder="Valor" required />
+                  <Input name="dueDay" type="number" min={1} max={31} defaultValue={sub.dueDay} placeholder="Dia de vencimento" required />
+                  <Input name="paymentDate" type="date" defaultValue={sub.paymentDate ? sub.paymentDate.slice(0, 10) : ""} className="col-span-2" />
+                  <Select name="status" defaultValue={sub.status} className="col-span-2">
+                    <option value="ATIVO">Ativo</option>
                     <option value="INADIMPLENTE">Inadimplente</option>
-                    <option value="VENCIDA">Vencida</option>
+                    <option value="VENCIDO">Vencido</option>
+                    <option value="CANCELADO">Cancelado</option>
                   </Select>
                   <div className="col-span-2 flex gap-2">
-                    <Button type="submit" loading={updatePolicyMutation.isPending}>
+                    <Button type="submit" loading={updateSubscriptionMutation.isPending}>
                       <Check size={14} />
                       Salvar
                     </Button>
-                    <Button type="button" variant="secondary" onClick={() => setEditingPolicyId(null)}>
+                    <Button type="button" variant="secondary" onClick={() => setEditingSubscriptionId(null)}>
                       Cancelar
                     </Button>
                   </div>
                 </form>
               ) : (
-                <div key={policy.id} className="flex items-center justify-between rounded-lg border border-ink-100 px-3 py-2 text-sm">
+                <div key={sub.id} className="flex items-center justify-between rounded-lg border border-ink-100 px-3 py-2 text-sm">
                   <div>
-                    <p className="font-medium text-ink-900">
-                      {policy.insuranceType} · {policy.insurer}
-                    </p>
+                    <p className="font-medium text-ink-900">{sub.service.name}</p>
                     <p className="text-xs text-ink-500">
-                      Nº {policy.policyNumber} · vencimento dia {policy.dueDay} · R$ {policy.value}
+                      vencimento dia {sub.dueDay} · R$ {sub.value}
+                      {sub.paymentDate ? ` · pago em ${new Date(sub.paymentDate).toLocaleDateString("pt-BR")}` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge color={policy.status === "ATIVA" ? "#1B7A4C" : "#8A2B2B"}>{policy.status}</Badge>
-                    <button onClick={() => setEditingPolicyId(policy.id)} className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700">
+                    <Badge color={sub.status === "ATIVO" ? "#1B7A4C" : "#8A2B2B"}>{sub.status}</Badge>
+                    <button onClick={() => setEditingSubscriptionId(sub.id)} className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700">
                       <Pencil size={14} />
                     </button>
                     <button
-                      onClick={() => deletePolicyMutation.mutate(policy.id)}
+                      onClick={() => deleteSubscriptionMutation.mutate(sub.id)}
                       className="rounded p-1 text-ink-400 hover:bg-red-50 hover:text-red-600"
                     >
                       <X size={14} />

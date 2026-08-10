@@ -25,6 +25,15 @@ async function canStartNewRun(followUpId: string, clientId: string): Promise<boo
   return !recentOrRunning;
 }
 
+function noResponseThresholdHours(config: any): number {
+  // formato legado: { hours: number }. formato atual: { amount: number, unit: "minutes" | "hours" | "days" }
+  if (typeof config.hours === "number") return config.hours;
+  const amount = typeof config.amount === "number" ? config.amount : 24;
+  if (config.unit === "minutes") return amount / 60;
+  if (config.unit === "days") return amount * 24;
+  return amount;
+}
+
 async function findEligibleClientsForNoResponse(hours: number): Promise<{ clientId: string; conversationId: string }[]> {
   const threshold = new Date(Date.now() - hours * 60 * 60 * 1000);
   const conversations = await prisma.conversation.findMany({
@@ -62,7 +71,7 @@ async function scanAndStartRuns() {
     let candidates: { clientId: string; conversationId?: string }[] = [];
 
     if (followUp.triggerType === "NO_RESPONSE") {
-      candidates = await findEligibleClientsForNoResponse(config.hours);
+      candidates = await findEligibleClientsForNoResponse(noResponseThresholdHours(config));
     } else if (followUp.triggerType === "STUCK_IN_STAGE") {
       candidates = await findEligibleClientsForStuckInStage(config.funnelStageId, config.days);
     } else if (followUp.triggerType === "AFTER_TAG") {

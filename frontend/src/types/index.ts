@@ -24,19 +24,6 @@ export interface FunnelStage {
   _count?: { clients: number };
 }
 
-export interface Policy {
-  id: string;
-  clientId: string;
-  insuranceType: string;
-  insurer: string;
-  policyNumber: string;
-  value: string;
-  dueDay: number;
-  status: "ATIVA" | "CANCELADA" | "INADIMPLENTE" | "VENCIDA";
-  startDate: string | null;
-  endDate: string | null;
-}
-
 export interface Service {
   id: string;
   name: string;
@@ -78,7 +65,6 @@ export interface Client {
   assignedUserId: string | null;
   assignedUser?: { id: string; name: string } | null;
   tags: Tag[];
-  policies?: Policy[];
   createdAt: string;
 }
 
@@ -150,8 +136,10 @@ export interface FollowUpStep {
   delayMinutes: number;
 }
 
+export type FollowUpTimeUnit = "minutes" | "hours" | "days";
+
 export type FollowUpTriggerConfig =
-  | { type: "NO_RESPONSE"; hours: number }
+  | { type: "NO_RESPONSE"; amount: number; unit: FollowUpTimeUnit }
   | { type: "STUCK_IN_STAGE"; funnelStageId: string; days: number }
   | { type: "AFTER_TAG"; tagId: string };
 

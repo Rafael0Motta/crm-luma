@@ -29,7 +29,6 @@ const CLIENT_INCLUDE = {
   tags: { include: { tag: true } },
   funnelStage: true,
   assignedUser: { select: { id: true, name: true } },
-  policies: true,
 };
 
 function serializeClient(client: any) {
@@ -309,42 +308,4 @@ clientsRouter.delete("/:id/tags/:tagId", async (req, res) => {
   });
   const client = await prisma.client.findUnique({ where: { id: req.params.id }, include: CLIENT_INCLUDE });
   res.json(serializeClient(client));
-});
-
-// -------- Apolices --------
-
-const policySchema = z.object({
-  insuranceType: z.string().min(1),
-  insurer: z.string().min(1),
-  policyNumber: z.string().min(1),
-  value: z.number().nonnegative(),
-  dueDay: z.number().int().min(1).max(31),
-  status: z.enum(["ATIVA", "CANCELADA", "INADIMPLENTE", "VENCIDA"]).optional(),
-  startDate: z.string().datetime().optional().nullable(),
-  endDate: z.string().datetime().optional().nullable(),
-});
-
-clientsRouter.get("/:id/policies", async (req, res) => {
-  const policies = await prisma.policy.findMany({ where: { clientId: req.params.id }, orderBy: { createdAt: "desc" } });
-  res.json(policies);
-});
-
-clientsRouter.post("/:id/policies", async (req, res) => {
-  const data = policySchema.parse(req.body);
-  const policy = await prisma.policy.create({ data: { ...data, clientId: req.params.id } });
-  res.status(201).json(policy);
-});
-
-export const policiesRouter = Router();
-policiesRouter.use(authenticate);
-
-policiesRouter.put("/:id", async (req, res) => {
-  const data = policySchema.partial().parse(req.body);
-  const policy = await prisma.policy.update({ where: { id: req.params.id }, data });
-  res.json(policy);
-});
-
-policiesRouter.delete("/:id", async (req, res) => {
-  await prisma.policy.delete({ where: { id: req.params.id } });
-  res.status(204).send();
 });
