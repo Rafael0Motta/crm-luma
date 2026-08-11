@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, FormEvent, DragEvent, ClipboardEvent } from "react";
+import { useEffect, useRef, useState, FormEvent, DragEvent, ClipboardEvent, ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -21,6 +21,9 @@ import {
   ArrowLeft,
   MessageSquare,
   MessageCircle,
+  Kanban,
+  User as UserIcon,
+  ChevronDown,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { ClientService, Conversation, ConversationStatus, FunnelStage, Message, Service, User } from "../types";
@@ -164,6 +167,35 @@ function MessageMedia({ message, onPreview }: { message: Message; onPreview: (me
       >
         <Download size={14} />
       </button>
+    </div>
+  );
+}
+
+function HeaderFieldSelect({
+  icon,
+  value,
+  onChange,
+  placeholder,
+  children,
+}: {
+  icon: ReactNode;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative flex items-center gap-1.5 rounded-full border border-ink-200 bg-white py-1.5 pl-2.5 pr-7 transition-colors hover:border-ink-300 focus-within:border-ink-400">
+      <span className="flex-shrink-0 text-ink-400">{icon}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="max-w-[9rem] flex-1 truncate bg-transparent text-xs font-medium text-ink-700 focus:outline-none"
+      >
+        <option value="">{placeholder}</option>
+        {children}
+      </select>
+      <ChevronDown size={12} className="pointer-events-none absolute right-2.5 flex-shrink-0 text-ink-400" />
     </div>
   );
 }
@@ -701,31 +733,31 @@ export function Inbox() {
                   </button>
                 </div>
               </div>
-              <div className="mt-2.5 flex items-center gap-2 overflow-x-auto lg:pl-[50px]">
-                <Select
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 lg:pl-[50px]">
+                <HeaderFieldSelect
+                  icon={<Kanban size={13} />}
                   value={selected.client?.funnelStageId ?? ""}
-                  onChange={(e) => e.target.value && funnelStageMutation.mutate(e.target.value)}
-                  className="!w-44 !py-1.5 text-xs"
+                  onChange={(value) => value && funnelStageMutation.mutate(value)}
+                  placeholder="Sem etapa"
                 >
-                  <option value="">Sem etapa</option>
                   {funnelStages?.map((stage) => (
                     <option key={stage.id} value={stage.id}>
                       {stage.name}
                     </option>
                   ))}
-                </Select>
-                <Select
+                </HeaderFieldSelect>
+                <HeaderFieldSelect
+                  icon={<UserIcon size={13} />}
                   value={selected.assignedUserId ?? ""}
-                  onChange={(e) => assignMutation.mutate(e.target.value || null)}
-                  className="!w-40 !py-1.5 text-xs"
+                  onChange={(value) => assignMutation.mutate(value || null)}
+                  placeholder="Sem atendente"
                 >
-                  <option value="">Sem atendente</option>
                   {users?.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
                   ))}
-                </Select>
+                </HeaderFieldSelect>
               </div>
             </div>
 
