@@ -87,13 +87,13 @@ export function MensagensAgendadas() {
         }
       />
 
-      <div className="p-8">
+      <div className="p-4 lg:p-8">
         {isLoading ? (
           <LoadingState />
         ) : messages?.length === 0 ? (
           <EmptyState title="Nenhuma mensagem agendada" />
         ) : (
-          <Card className="overflow-hidden">
+          <Card className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
                 <tr>

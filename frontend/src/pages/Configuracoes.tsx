@@ -2,8 +2,14 @@ import { useState, FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QrCode, RefreshCw, Plus, Trash2, CheckCircle2, XCircle, Pencil } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
-import { AISettings } from "../types";
-import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Card, Switch, LoadingState } from "../components/ui";
+import { AISettings, WhatsAppInstance } from "../types";
+import { PageHeader, Button, Modal, Input, Select, Label, Textarea, Card, Switch, LoadingState, Badge } from "../components/ui";
+
+const INSTANCE_PURPOSE_LABELS: Record<WhatsAppInstance["purpose"], string> = {
+  ATENDIMENTO: "Atendimento",
+  FOLLOWUP: "Follow-ups",
+  COBRANCA: "Cobrança",
+};
 
 export function Configuracoes() {
   const [tab, setTab] = useState<"evolution" | "ai">("evolution");
@@ -29,7 +35,7 @@ export function Configuracoes() {
           ))}
         </div>
       </div>
-      <div className="p-8">{tab === "evolution" ? <EvolutionTab /> : <AITab />}</div>
+      <div className="p-4 lg:p-8">{tab === "evolution" ? <EvolutionTab /> : <AITab />}</div>
     </div>
   );
 }
@@ -51,6 +57,7 @@ function EvolutionTab() {
   const connected = status?.state === "open" || status?.state === "connected";
 
   return (
+    <>
     <Card className="max-w-xl p-6">
       <div className="flex items-center justify-between">
         <div>
@@ -91,9 +98,225 @@ function EvolutionTab() {
 
       <p className="mt-5 text-xs text-ink-400">
         As credenciais da Evolution API (URL, chave e nome da instância) são definidas nas variáveis de ambiente do backend
-        (EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE_NAME).
+        (EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE_NAME). Essa é a instância padrão, usada quando nenhuma
+        instância específica está configurada abaixo para um módulo.
       </p>
     </Card>
+    <WhatsAppInstancesSection />
+    </>
+  );
+}
+
+function WhatsAppInstancesSection() {
+  const queryClient = useQueryClient();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<WhatsAppInstance | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [qrInstanceId, setQrInstanceId] = useState<string | null>(null);
+
+  const { data: instances, isLoading } = useQuery({
+    queryKey: ["whatsapp-instances"],
+    queryFn: async () => (await api.get<WhatsAppInstance[]>("/settings/whatsapp-instances")).data,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown> & { id?: string }) => {
+      const { id, ...rest } = payload;
+      return id ? api.put(`/settings/whatsapp-instances/${id}`, rest) : api.post("/settings/whatsapp-instances", rest);
+    },
+    onSuccess: () => {
+      setFormOpen(false);
+      setEditing(null);
+      setFormError(null);
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
+    },
+    onError: (err) => setFormError(getApiErrorMessage(err)),
+    meta: { skipGlobalErrorToast: true },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async (id: string) => api.patch(`/settings/whatsapp-instances/${id}/toggle`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => api.delete(`/settings/whatsapp-instances/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] }),
+  });
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const apiKey = form.get("apiKey");
+    saveMutation.mutate({
+      id: editing?.id,
+      label: form.get("label"),
+      instanceName: form.get("instanceName"),
+      apiUrl: form.get("apiUrl") || undefined,
+      purpose: form.get("purpose"),
+      ...(apiKey ? { apiKey } : {}),
+    });
+  }
+
+  return (
+    <Card className="mt-6 max-w-xl p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium text-ink-950">Instâncias por módulo</p>
+          <p className="mt-0.5 text-xs text-ink-500">Defina números diferentes para atendimento, follow-ups e cobrança</p>
+        </div>
+        <Button variant="secondary" onClick={() => setFormOpen(true)}>
+          <Plus size={14} />
+          Nova instância
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <LoadingState />
+      ) : instances?.length === 0 ? (
+        <p className="mt-4 text-sm text-ink-400">Nenhuma instância cadastrada — todos os módulos usam a instância padrão acima.</p>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {instances?.map((instance) => (
+            <div key={instance.id} className="rounded-lg border border-ink-100 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink-950">{instance.label}</p>
+                  <p className="truncate text-xs text-ink-500">{instance.instanceName}</p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <Badge>{INSTANCE_PURPOSE_LABELS[instance.purpose]}</Badge>
+                  <Switch checked={instance.active} onChange={() => toggleMutation.mutate(instance.id)} />
+                  <button
+                    onClick={() => setQrInstanceId(instance.id)}
+                    className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100"
+                    title="Ver status / QR Code"
+                  >
+                    <QrCode size={15} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditing(instance);
+                      setFormOpen(true);
+                    }}
+                    className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    onClick={() => deleteMutation.mutate(instance.id)}
+                    className="rounded-lg p-1.5 text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={formOpen}
+        onClose={() => {
+          setFormOpen(false);
+          setEditing(null);
+          setFormError(null);
+        }}
+        title={editing ? "Editar instância" : "Nova instância"}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>Nome (para identificação interna)</Label>
+            <Input name="label" defaultValue={editing?.label ?? ""} placeholder="Ex: Número de cobrança" required />
+          </div>
+          <div>
+            <Label>Nome da instância na Evolution API</Label>
+            <Input name="instanceName" defaultValue={editing?.instanceName ?? ""} required />
+          </div>
+          <div>
+            <Label>Módulo responsável</Label>
+            <Select name="purpose" defaultValue={editing?.purpose ?? "ATENDIMENTO"}>
+              {Object.entries(INSTANCE_PURPOSE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>URL da API (opcional — em branco usa a URL padrão)</Label>
+            <Input name="apiUrl" defaultValue={editing?.apiUrl ?? ""} placeholder="https://minha-evolution-api.com" />
+          </div>
+          <div>
+            <Label>{editing ? "Nova chave de API (opcional)" : "Chave de API (opcional — em branco usa a chave padrão)"}</Label>
+            <Input name="apiKey" type="password" placeholder={editing?.apiKeyMasked ? `Atual: ${editing.apiKeyMasked}` : undefined} />
+          </div>
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
+          <Button type="submit" className="w-full" loading={saveMutation.isPending}>
+            Salvar instância
+          </Button>
+        </form>
+      </Modal>
+
+      {qrInstanceId && <InstanceStatusModal instanceId={qrInstanceId} onClose={() => setQrInstanceId(null)} />}
+    </Card>
+  );
+}
+
+function InstanceStatusModal({ instanceId, onClose }: { instanceId: string; onClose: () => void }) {
+  const { data: status, isLoading, refetch, isRefetching } = useQuery({
+    queryKey: ["whatsapp-instance-status", instanceId],
+    queryFn: async () => (await api.get(`/settings/whatsapp-instances/${instanceId}/status`)).data,
+  });
+
+  const { data: qr, refetch: refetchQr, isFetching: loadingQr } = useQuery({
+    queryKey: ["whatsapp-instance-qr", instanceId],
+    queryFn: async () => (await api.get(`/settings/whatsapp-instances/${instanceId}/qrcode`)).data,
+    enabled: false,
+  });
+
+  const connected = status?.state === "open" || status?.state === "connected";
+
+  return (
+    <Modal open onClose={onClose} title="Status da instância">
+      {isLoading ? (
+        <LoadingState />
+      ) : (
+        <div>
+          <div className="flex items-center justify-between">
+            {connected ? (
+              <span className="flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1 text-xs font-medium text-ink-700">
+                <CheckCircle2 size={14} className="text-emerald-600" />
+                Conectado
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
+                <XCircle size={14} />
+                {status?.state ?? "Desconectado"}
+              </span>
+            )}
+            <button onClick={() => refetch()} className="rounded-lg p-2 text-ink-500 hover:bg-ink-100" title="Atualizar status">
+              <RefreshCw size={16} className={isRefetching ? "animate-spin" : ""} />
+            </button>
+          </div>
+
+          {!connected && (
+            <div className="mt-5 border-t border-ink-100 pt-5">
+              <Button variant="secondary" onClick={() => refetchQr()} loading={loadingQr}>
+                <QrCode size={16} />
+                Gerar QR Code de conexão
+              </Button>
+              {qr?.base64 && (
+                <div className="mt-4 flex justify-center rounded-lg border border-ink-100 p-4">
+                  <img src={qr.base64} alt="QR Code Evolution API" className="h-56 w-56" />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
 

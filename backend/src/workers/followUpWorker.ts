@@ -2,7 +2,8 @@ import { Worker } from "bullmq";
 import { redisConnection } from "../config/redis";
 import { prisma } from "../config/prisma";
 import { logger } from "../config/logger";
-import { sendTextMessage } from "../services/evolution";
+import { sendTextMessage, SendTextResult } from "../services/evolution";
+import { resolveInstanceByPurpose } from "../services/whatsappInstances";
 import { findOrCreateOpenConversation } from "../services/conversationHelper";
 import { publishEvent } from "../services/eventBus";
 
@@ -101,6 +102,9 @@ async function processDueRuns() {
     where: { status: "RUNNING", nextRunAt: { lte: new Date() } },
     include: { followUp: true, client: true },
   });
+  if (dueRuns.length === 0) return;
+
+  const instance = await resolveInstanceByPurpose("FOLLOWUP");
 
   for (const run of dueRuns) {
     const steps = (run.followUp.steps as unknown as FollowUpStep[]) ?? [];
@@ -112,7 +116,9 @@ async function processDueRuns() {
     }
 
     try {
-      const result = await sendTextMessage(run.client.phone, step.message);
+      const result: SendTextResult = instance
+        ? await sendTextMessage(instance, run.client.phone, step.message)
+        : { success: false, errorMessage: "Evolution API nao configurada para follow-ups" };
 
       const conversation = run.conversationId
         ? await prisma.conversation.findUnique({ where: { id: run.conversationId } })
@@ -129,6 +135,7 @@ async function processDueRuns() {
             sender: "AUTOMATION",
             evolutionMessageId: result.evolutionMessageId,
             errorMessage: result.errorMessage,
+            instanceId: instance?.instanceId ?? undefined,
           },
         });
         await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent, DragEvent, ClipboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -16,6 +16,9 @@ import {
   UserPlus,
   Package,
   Receipt,
+  Download,
+  Maximize2,
+  ArrowLeft,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { ClientService, Conversation, ConversationStatus, FunnelStage, Message, Service, User } from "../types";
@@ -53,29 +56,113 @@ function mediaSrc(mediaUrl: string) {
   return mediaUrl.startsWith("http") ? mediaUrl : `${API_URL}${mediaUrl}`;
 }
 
-function MessageMedia({ message }: { message: Message }) {
+function fileNameFromUrl(src: string): string {
+  const clean = src.split("?")[0];
+  return clean.substring(clean.lastIndexOf("/") + 1) || "arquivo";
+}
+
+async function downloadMedia(src: string, fileName: string) {
+  try {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch {
+    window.open(src, "_blank");
+  }
+}
+
+type LightboxMedia = { src: string; type: "IMAGE" | "VIDEO" };
+
+function MessageMedia({ message, onPreview }: { message: Message; onPreview: (media: LightboxMedia) => void }) {
   if (!message.mediaUrl) return null;
   const src = mediaSrc(message.mediaUrl);
+  const fileName = fileNameFromUrl(src);
 
   if (message.type === "IMAGE") {
-    return <img src={src} alt="Imagem enviada" className="mb-1.5 max-h-64 rounded-lg object-cover" />;
+    return (
+      <div className="group relative mb-1.5 inline-block">
+        <img
+          src={src}
+          alt="Imagem enviada"
+          onClick={() => onPreview({ src, type: "IMAGE" })}
+          className="max-h-64 cursor-zoom-in rounded-lg object-cover"
+        />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            downloadMedia(src, fileName);
+          }}
+          title="Baixar imagem"
+          className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-ink-950/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+        >
+          <Download size={14} />
+        </button>
+      </div>
+    );
   }
   if (message.type === "VIDEO") {
-    return <video src={src} controls className="mb-1.5 max-h-64 rounded-lg" />;
+    return (
+      <div className="group relative mb-1.5 inline-block">
+        <video src={src} controls className="max-h-64 rounded-lg" />
+        <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={() => onPreview({ src, type: "VIDEO" })}
+            title="Ver em tela cheia"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-950/60 text-white"
+          >
+            <Maximize2 size={13} />
+          </button>
+          <button
+            onClick={() => downloadMedia(src, fileName)}
+            title="Baixar vídeo"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-950/60 text-white"
+          >
+            <Download size={14} />
+          </button>
+        </div>
+      </div>
+    );
   }
   if (message.type === "AUDIO") {
-    return <audio src={src} controls className="mb-1.5 w-64" />;
+    return (
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <audio src={src} controls className="w-64" />
+        <button
+          onClick={() => downloadMedia(src, fileName)}
+          title="Baixar áudio"
+          className="flex-shrink-0 rounded-lg p-1.5 text-current opacity-70 hover:bg-current/10 hover:opacity-100"
+        >
+          <Download size={14} />
+        </button>
+      </div>
+    );
   }
   return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noreferrer"
-      className="mb-1.5 flex items-center gap-2 rounded-lg border border-current/20 px-3 py-2 text-sm underline"
-    >
-      <FileText size={16} />
-      Abrir documento
-    </a>
+    <div className="mb-1.5 flex items-center gap-1.5">
+      <a
+        href={src}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-2 rounded-lg border border-current/20 px-3 py-2 text-sm underline"
+      >
+        <FileText size={16} />
+        Abrir documento
+      </a>
+      <button
+        onClick={() => downloadMedia(src, fileName)}
+        title="Baixar documento"
+        className="flex-shrink-0 rounded-lg p-1.5 text-current opacity-70 hover:bg-current/10 hover:opacity-100"
+      >
+        <Download size={14} />
+      </button>
+    </div>
   );
 }
 
@@ -141,8 +228,55 @@ export function Inbox() {
   const [billingLinkType, setBillingLinkType] = useState<"clientService" | "client">("clientService");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [newConversationError, setNewConversationError] = useState<string | null>(null);
+  const [lightboxMedia, setLightboxMedia] = useState<LightboxMedia | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
+
+  useEffect(() => {
+    if (!lightboxMedia) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxMedia(null);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxMedia]);
+
+  function handleDragEnter(e: DragEvent) {
+    e.preventDefault();
+    if (!selected || !e.dataTransfer.types.includes("Files")) return;
+    dragCounterRef.current += 1;
+    setIsDraggingFile(true);
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    if (dragCounterRef.current > 0) dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) setIsDraggingFile(false);
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+    if (!selected) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) setPendingFile(file);
+  }
+
+  function handlePaste(e: ClipboardEvent) {
+    const item = Array.from(e.clipboardData.items).find((i) => i.kind === "file");
+    if (!item) return;
+    const file = item.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    setPendingFile(file);
+  }
 
   useEffect(() => {
     const openId = searchParams.get("open");
@@ -379,7 +513,11 @@ export function Inbox() {
 
   return (
     <div className="flex h-full">
-      <div className="flex w-80 flex-shrink-0 flex-col border-r border-ink-100 bg-white">
+      <div
+        className={`w-full flex-shrink-0 flex-col border-r border-ink-100 bg-white lg:flex lg:w-80 ${
+          selectedId ? "hidden" : "flex"
+        }`}
+      >
         <div className="border-b border-ink-100 px-5 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-base font-semibold text-ink-950">Conversas</h1>
@@ -469,27 +607,45 @@ export function Inbox() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col bg-ink-50">
+      <div
+        className={`relative flex-1 flex-col bg-ink-50 lg:flex ${selectedId ? "flex" : "hidden"}`}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {isDraggingFile && selected && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-4 border-dashed border-gold-500 bg-ink-950/50">
+            <p className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-ink-900">Solte o arquivo para anexar</p>
+          </div>
+        )}
         {!selected ? (
           <div className="flex flex-1 items-center justify-center">
             <EmptyState title="Selecione uma conversa" subtitle="Escolha uma conversa na lista ao lado para visualizar as mensagens." />
           </div>
         ) : (
           <>
-            <div className="border-b border-ink-100 bg-white px-6 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <div className="border-b border-ink-100 bg-white px-4 py-3 lg:px-6">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 lg:hidden"
+                    title="Voltar para a lista de conversas"
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
                   <Avatar name={selected.client?.name ?? selected.whatsappNumber} size={38} />
                   <div>
                     <p className="text-sm font-semibold text-ink-950">{selected.client?.name ?? selected.whatsappNumber}</p>
                     <p className="text-xs text-ink-500">{selected.whatsappNumber}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto">
                   <button
                     onClick={() => aiToggleMutation.mutate(!selected.aiEnabled)}
                     title={selected.aiEnabled ? "IA ativada nesta conversa — clique para desativar" : "IA desativada nesta conversa — clique para ativar"}
-                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                    className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                       selected.aiEnabled
                         ? "border-ink-700 bg-ink-800 text-white hover:bg-ink-700"
                         : "border-ink-200 text-ink-500 hover:bg-ink-50"
@@ -500,7 +656,7 @@ export function Inbox() {
                   </button>
                   <button
                     onClick={() => setScheduleOpen(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
                     title="Agendar mensagem para este cliente"
                   >
                     <CalendarClock size={14} />
@@ -508,7 +664,7 @@ export function Inbox() {
                   </button>
                   <button
                     onClick={() => setLinkServiceOpen(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
                     title="Vincular este lead a um serviço"
                   >
                     <Package size={14} />
@@ -516,7 +672,7 @@ export function Inbox() {
                   </button>
                   <button
                     onClick={() => setBillingOpen(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
                     title="Criar lembrete de cobrança para este lead"
                   >
                     <Receipt size={14} />
@@ -525,14 +681,14 @@ export function Inbox() {
                   <button
                     onClick={() => statusMutation.mutate("RESOLVIDA")}
                     disabled={selected.status === "RESOLVIDA"}
-                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-40"
+                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-40"
                   >
                     <CheckCircle2 size={14} />
                     Resolver
                   </button>
                 </div>
               </div>
-              <div className="mt-2.5 flex items-center gap-2 pl-[50px]">
+              <div className="mt-2.5 flex items-center gap-2 overflow-x-auto lg:pl-[50px]">
                 <Select
                   value={selected.client?.funnelStageId ?? ""}
                   onChange={(e) => e.target.value && funnelStageMutation.mutate(e.target.value)}
@@ -560,7 +716,7 @@ export function Inbox() {
               </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto px-6 py-6">
+            <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto px-3 py-4 lg:px-6 lg:py-6">
               {groupedMessages.map((group) => (
                 <div key={group.dateLabel}>
                   <div className="my-4 flex items-center justify-center">
@@ -570,11 +726,11 @@ export function Inbox() {
                     {group.items.map((msg) => (
                       <div key={msg.id} className={`flex ${msg.direction === "OUTBOUND" ? "justify-end" : "justify-start"}`}>
                         <div
-                          className={`max-w-md rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+                          className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm lg:max-w-md ${
                             msg.direction === "OUTBOUND" ? "bg-ink-800 text-white" : "bg-white text-ink-900"
                           }`}
                         >
-                          <MessageMedia message={msg} />
+                          <MessageMedia message={msg} onPreview={setLightboxMedia} />
                           {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
                           <div className="mt-1 flex items-center gap-1.5 text-[10px] opacity-70">
                             <span>{formatTime(msg.createdAt)}</span>
@@ -603,7 +759,7 @@ export function Inbox() {
               )}
             </div>
 
-            <div className="border-t border-ink-100 bg-white px-6 py-4">
+            <div className="border-t border-ink-100 bg-white px-3 py-3 lg:px-6 lg:py-4">
               {sendMutation.isError && (
                 <p className="mb-2 text-xs text-red-600">{getApiErrorMessage(sendMutation.error)}</p>
               )}
@@ -640,6 +796,7 @@ export function Inbox() {
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
+                  onPaste={handlePaste}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -821,6 +978,47 @@ export function Inbox() {
           </Button>
         </form>
       </Modal>
+
+      {lightboxMedia && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4"
+          onClick={() => setLightboxMedia(null)}
+        >
+          <button
+            onClick={() => setLightboxMedia(null)}
+            title="Fechar"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            <X size={20} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadMedia(lightboxMedia.src, fileNameFromUrl(lightboxMedia.src));
+            }}
+            className="absolute left-4 top-4 flex h-10 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/20"
+          >
+            <Download size={16} />
+            Baixar
+          </button>
+          {lightboxMedia.type === "IMAGE" ? (
+            <img
+              src={lightboxMedia.src}
+              alt="Visualização em tela cheia"
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain"
+            />
+          ) : (
+            <video
+              src={lightboxMedia.src}
+              controls
+              autoPlay
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[85vh] max-w-[90vw] rounded-lg"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma";
 import { logger } from "../../config/logger";
 import { runAutomationsForEvent, cancelPendingFollowUpsForClient } from "../../services/automationEngine";
 import { getBase64FromMediaMessage } from "../../services/evolution";
+import { resolveInstanceByName, InstanceCredentials } from "../../services/whatsappInstances";
 import { saveBase64ToUploads } from "../../services/mediaStorage";
 import { publishEvent } from "../../services/eventBus";
 import { MessageType } from "@prisma/client";
@@ -55,11 +56,14 @@ function extractPhone(remoteJid: string | undefined): string | null {
   return id;
 }
 
-async function resolveInboundMedia(data: EvolutionMessageData): Promise<{ type: MessageType; mediaUrl: string | null } | null> {
+async function resolveInboundMedia(
+  instance: InstanceCredentials | null,
+  data: EvolutionMessageData
+): Promise<{ type: MessageType; mediaUrl: string | null } | null> {
   const mediaType = detectMediaType(data);
-  if (!mediaType || !data.key?.id || !data.key?.remoteJid) return null;
+  if (!mediaType || !data.key?.id || !data.key?.remoteJid || !instance) return mediaType ? { type: mediaType, mediaUrl: null } : null;
 
-  const media = await getBase64FromMediaMessage(data.key.id, data.key.remoteJid);
+  const media = await getBase64FromMediaMessage(instance, data.key.id, data.key.remoteJid);
   if (!media) {
     // Nao foi possivel obter a midia (API antiga, midia expirada, etc) - registra a mensagem mesmo assim, sem anexo.
     return { type: mediaType, mediaUrl: null };
@@ -70,12 +74,13 @@ async function resolveInboundMedia(data: EvolutionMessageData): Promise<{ type: 
   return { type: mediaType, mediaUrl: saved.relativeUrl };
 }
 
-async function handleInboundMessage(data: EvolutionMessageData) {
+async function handleInboundMessage(instanceName: string | undefined, data: EvolutionMessageData) {
   const phone = extractPhone(data.key?.remoteJid);
   if (!phone || data.key?.fromMe) return;
 
+  const instance = instanceName ? await resolveInstanceByName(instanceName) : null;
   const text = extractText(data);
-  const media = await resolveInboundMedia(data);
+  const media = await resolveInboundMedia(instance, data);
 
   let client = await prisma.client.findUnique({ where: { phone } });
   if (!client) {
@@ -106,6 +111,7 @@ async function handleInboundMessage(data: EvolutionMessageData) {
       status: "DELIVERED",
       sender: "HUMAN",
       evolutionMessageId: data.key?.id,
+      instanceId: instance?.instanceId ?? undefined,
     },
   });
 
@@ -151,10 +157,12 @@ evolutionWebhookRouter.post("/", async (req, res) => {
   const event = String(body.event ?? "").toLowerCase();
 
   try {
+    const instanceName: string | undefined = typeof body.instance === "string" ? body.instance : undefined;
+
     if (event.includes("messages.upsert") || event.includes("messages_upsert")) {
       const dataList = Array.isArray(body.data) ? body.data : [body.data];
       for (const item of dataList) {
-        if (item) await handleInboundMessage(item);
+        if (item) await handleInboundMessage(instanceName, item);
       }
     } else if (event.includes("messages.update") || event.includes("messages_update")) {
       const dataList = Array.isArray(body.data) ? body.data : [body.data];

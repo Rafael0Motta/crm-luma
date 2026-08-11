@@ -194,13 +194,25 @@ export interface AISettings {
   apiKeyMasked: string;
 }
 
+export interface WhatsAppInstance {
+  id: string;
+  label: string;
+  instanceName: string;
+  apiUrl: string | null;
+  apiKeyMasked: string | null;
+  purpose: "ATENDIMENTO" | "FOLLOWUP" | "COBRANCA";
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FollowUpRun {
   id: string;
   followUpId: string;
   clientId: string;
   client: { id: string; name: string; phone: string };
   currentStep: number;
-  status: "RUNNING" | "COMPLETED" | "STOPPED" | "FAILED";
+  status: "RUNNING" | "PAUSED" | "COMPLETED" | "STOPPED" | "FAILED";
   nextRunAt: string | null;
   createdAt: string;
   updatedAt: string;

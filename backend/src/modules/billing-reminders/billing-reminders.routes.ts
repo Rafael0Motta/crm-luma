@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../../config/prisma";
 import { authenticate } from "../../middlewares/auth";
 import { AppError } from "../../middlewares/errorHandler";
-import { sendTextMessage } from "../../services/evolution";
+import { sendTextMessage, SendTextResult } from "../../services/evolution";
+import { resolveInstanceByPurpose } from "../../services/whatsappInstances";
 import { renderBillingTemplate } from "../../services/billingTemplate";
 import { logAudit } from "../../services/auditLog";
 
@@ -117,7 +118,10 @@ billingRemindersRouter.post("/:id/send-test", async (req, res) => {
     dueDay,
   });
 
-  const result = await sendTextMessage(client.phone, content);
+  const instance = await resolveInstanceByPurpose("COBRANCA");
+  const result: SendTextResult = instance
+    ? await sendTextMessage(instance, client.phone, content)
+    : { success: false, errorMessage: "Evolution API nao configurada" };
   await prisma.billingReminderLog.create({
     data: {
       billingReminderId: reminder.id,

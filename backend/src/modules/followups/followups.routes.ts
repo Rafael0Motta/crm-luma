@@ -79,6 +79,26 @@ followUpsRouter.patch("/:id/toggle", async (req, res) => {
   res.json(updated);
 });
 
+followUpsRouter.patch("/runs/:runId/pause", async (req, res) => {
+  const run = await prisma.followUpRun.findUnique({ where: { id: req.params.runId } });
+  if (!run) throw new AppError("Execução de follow-up não encontrada", 404);
+  if (run.status !== "RUNNING") throw new AppError("Só é possível pausar uma execução em andamento", 400);
+
+  const updated = await prisma.followUpRun.update({ where: { id: run.id }, data: { status: "PAUSED" } });
+  await logAudit(req.user!.sub, "pause", "FollowUpRun", updated.id, { clientId: updated.clientId });
+  res.json(updated);
+});
+
+followUpsRouter.patch("/runs/:runId/resume", async (req, res) => {
+  const run = await prisma.followUpRun.findUnique({ where: { id: req.params.runId } });
+  if (!run) throw new AppError("Execução de follow-up não encontrada", 404);
+  if (run.status !== "PAUSED") throw new AppError("Só é possível retomar uma execução pausada", 400);
+
+  const updated = await prisma.followUpRun.update({ where: { id: run.id }, data: { status: "RUNNING" } });
+  await logAudit(req.user!.sub, "resume", "FollowUpRun", updated.id, { clientId: updated.clientId });
+  res.json(updated);
+});
+
 followUpsRouter.delete("/:id", async (req, res) => {
   await prisma.followUp.delete({ where: { id: req.params.id } });
   await logAudit(req.user!.sub, "delete", "FollowUp", req.params.id);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Pencil, History } from "lucide-react";
+import { Plus, Trash2, Pencil, History, Pause, Play } from "lucide-react";
 import { api } from "../api/client";
 import { FollowUp, FollowUpRun, FollowUpStep, FollowUpTriggerConfig, FunnelStage, Tag } from "../types";
 import { PageHeader, Button, Modal, Input, Select, Label, Switch, Textarea, LoadingState, EmptyState, Card, Badge } from "../components/ui";
@@ -13,6 +13,7 @@ const TRIGGER_TYPE_LABELS: Record<FollowUpTriggerConfig["type"], string> = {
 
 const RUN_STATUS_LABELS: Record<FollowUpRun["status"], { label: string; color: string }> = {
   RUNNING: { label: "Em andamento", color: "#226B63" },
+  PAUSED: { label: "Pausado", color: "#A8822E" },
   COMPLETED: { label: "Concluído", color: "#1B7A4C" },
   STOPPED: { label: "Interrompido", color: "#A8822E" },
   FAILED: { label: "Falhou", color: "#8A2B2B" },
@@ -76,7 +77,7 @@ export function FollowUps() {
         }
       />
 
-      <div className="p-8">
+      <div className="p-4 lg:p-8">
         {isLoading ? (
           <LoadingState />
         ) : followUps?.length === 0 ? (
@@ -126,9 +127,20 @@ export function FollowUps() {
 }
 
 function FollowUpRunsModal({ followUpId, onClose }: { followUpId: string; onClose: () => void }) {
+  const queryClient = useQueryClient();
   const { data: runs, isLoading } = useQuery({
     queryKey: ["followup-runs", followUpId],
     queryFn: async () => (await api.get<FollowUpRun[]>(`/followups/${followUpId}/runs`)).data,
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: async (runId: string) => api.patch(`/followups/runs/${runId}/pause`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["followup-runs", followUpId] }),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: async (runId: string) => api.patch(`/followups/runs/${runId}/resume`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["followup-runs", followUpId] }),
   });
 
   return (
@@ -148,7 +160,29 @@ function FollowUpRunsModal({ followUpId, onClose }: { followUpId: string; onClos
                   {run.nextRunAt && run.status === "RUNNING" ? ` · próximo envio ${new Date(run.nextRunAt).toLocaleString("pt-BR")}` : ""}
                 </p>
               </div>
-              <Badge color={RUN_STATUS_LABELS[run.status].color}>{RUN_STATUS_LABELS[run.status].label}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge color={RUN_STATUS_LABELS[run.status].color}>{RUN_STATUS_LABELS[run.status].label}</Badge>
+                {run.status === "RUNNING" && (
+                  <button
+                    onClick={() => pauseMutation.mutate(run.id)}
+                    disabled={pauseMutation.isPending}
+                    title="Pausar este lead"
+                    className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100"
+                  >
+                    <Pause size={14} />
+                  </button>
+                )}
+                {run.status === "PAUSED" && (
+                  <button
+                    onClick={() => resumeMutation.mutate(run.id)}
+                    disabled={resumeMutation.isPending}
+                    title="Retomar este lead"
+                    className="rounded-lg p-1.5 text-ink-500 hover:bg-ink-100"
+                  >
+                    <Play size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

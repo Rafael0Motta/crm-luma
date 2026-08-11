@@ -4,7 +4,8 @@ import { z } from "zod";
 import { prisma } from "../../config/prisma";
 import { authenticate } from "../../middlewares/auth";
 import { AppError } from "../../middlewares/errorHandler";
-import { mediaTypeFromMimetype, sendMediaMessage, sendTextMessage } from "../../services/evolution";
+import { mediaTypeFromMimetype, sendMediaMessage, sendTextMessage, SendTextResult } from "../../services/evolution";
+import { resolveInstanceByPurpose } from "../../services/whatsappInstances";
 import { saveBufferToUploads } from "../../services/mediaStorage";
 import { cancelPendingFollowUpsForClient } from "../../services/automationEngine";
 import { publishEvent } from "../../services/eventBus";
@@ -84,7 +85,10 @@ conversationsRouter.post("/:id/messages", async (req, res) => {
   const conversation = await prisma.conversation.findUnique({ where: { id: req.params.id } });
   if (!conversation) throw new AppError("Conversa nao encontrada", 404);
 
-  const result = await sendTextMessage(conversation.whatsappNumber, content);
+  const instance = await resolveInstanceByPurpose("ATENDIMENTO");
+  const result: SendTextResult = instance
+    ? await sendTextMessage(instance, conversation.whatsappNumber, content)
+    : { success: false, errorMessage: "Evolution API nao configurada" };
 
   const message = await prisma.message.create({
     data: {
@@ -97,6 +101,7 @@ conversationsRouter.post("/:id/messages", async (req, res) => {
       senderUserId: req.user!.sub,
       evolutionMessageId: result.evolutionMessageId,
       errorMessage: result.errorMessage,
+      instanceId: instance?.instanceId ?? undefined,
     },
   });
 
@@ -124,7 +129,10 @@ conversationsRouter.post("/:id/messages/media", upload.single("file"), async (re
   const mediatype = mediaTypeFromMimetype(req.file.mimetype);
   const base64 = req.file.buffer.toString("base64");
 
-  const result = await sendMediaMessage(conversation.whatsappNumber, base64, mediatype, req.file.originalname, caption);
+  const instance = await resolveInstanceByPurpose("ATENDIMENTO");
+  const result: SendTextResult = instance
+    ? await sendMediaMessage(instance, conversation.whatsappNumber, base64, mediatype, req.file.originalname, caption)
+    : { success: false, errorMessage: "Evolution API nao configurada" };
   const saved = saveBufferToUploads(req.file.buffer, req.file.mimetype, req.file.originalname);
 
   const message = await prisma.message.create({
@@ -139,6 +147,7 @@ conversationsRouter.post("/:id/messages/media", upload.single("file"), async (re
       senderUserId: req.user!.sub,
       evolutionMessageId: result.evolutionMessageId,
       errorMessage: result.errorMessage,
+      instanceId: instance?.instanceId ?? undefined,
     },
   });
 

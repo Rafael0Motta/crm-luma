@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   LogOut,
   BookOpen,
   Package,
+  Menu,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useLiveEvents } from "../hooks/useLiveEvents";
@@ -38,11 +40,23 @@ const NAV_ITEMS = [
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   useLiveEvents();
 
   return (
     <div className="flex h-screen overflow-hidden bg-ink-50">
-      <aside className="flex w-64 flex-shrink-0 flex-col border-r border-ink-100 bg-ink-950 text-ink-50">
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-ink-950/50 lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-shrink-0 -translate-x-full flex-col border-r border-ink-100 bg-ink-950 text-ink-50 transition-transform duration-200 lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : ""
+        }`}
+      >
         <div className="flex items-center gap-2 px-6 py-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-500 text-ink-950">
             <Sparkles size={18} strokeWidth={2.5} />
@@ -59,6 +73,7 @@ export function Layout() {
               key={item.to}
               to={item.to}
               end={item.end}
+              onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive ? "bg-ink-800 text-white" : "text-ink-200 hover:bg-ink-900 hover:text-white"
@@ -92,7 +107,14 @@ export function Layout() {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex flex-shrink-0 items-center justify-end border-b border-ink-100 bg-white px-6 py-2.5">
+        <header className="flex flex-shrink-0 items-center justify-between border-b border-ink-100 bg-white px-4 py-2.5 lg:justify-end lg:px-6">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="rounded-lg p-2 text-ink-600 hover:bg-ink-100 lg:hidden"
+            title="Abrir menu"
+          >
+            <Menu size={20} />
+          </button>
           <NotificationBell />
         </header>
         <main className="flex-1 overflow-y-auto">

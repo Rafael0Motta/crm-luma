@@ -213,7 +213,7 @@ export function Clientes() {
         }
       />
 
-      <div className="p-8">
+      <div className="p-4 lg:p-8">
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="max-w-sm flex-1">
             <Label>Buscar</Label>
@@ -341,7 +341,7 @@ export function Clientes() {
         ) : clients?.length === 0 ? (
           <EmptyState title="Nenhum cliente encontrado" />
         ) : (
-          <Card className="overflow-hidden">
+          <Card className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-ink-100 bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
                 <tr>

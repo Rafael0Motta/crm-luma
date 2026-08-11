@@ -51,7 +51,7 @@ export function Dashboard() {
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Visão geral da operação" />
-      <div className="p-8">
+      <div className="p-4 lg:p-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile icon={MessageCircle} label="Conversas abertas" value={data.openConversations} tone="bg-ink-100 text-ink-700" />
           <StatTile icon={Clock} label="Conversas pendentes" value={data.pendingConversations} tone="bg-gold-200 text-gold-700" />

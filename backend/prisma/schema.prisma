@@ -227,11 +227,40 @@ model Message {
   senderUserId        String?           @map("sender_user_id")
   evolutionMessageId  String?           @map("evolution_message_id")
   errorMessage        String?           @map("error_message")
+  instanceId          String?           @map("instance_id") // qual instancia (numero) da Evolution API enviou/recebeu esta mensagem
+  instance            WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
   createdAt           DateTime          @default(now()) @map("created_at")
 
   @@index([conversationId])
   @@index([evolutionMessageId])
+  @@index([instanceId])
   @@map("messages")
+}
+
+// ============================================================
+// Instancias da Evolution API (multiplos numeros de WhatsApp)
+// ============================================================
+
+enum WhatsAppInstancePurpose {
+  ATENDIMENTO
+  FOLLOWUP
+  COBRANCA
+}
+
+model WhatsAppInstance {
+  id           String                  @id @default(cuid())
+  label        String
+  instanceName String                  @unique @map("instance_name")
+  apiUrl       String?                 @map("api_url") // vazio usa EVOLUTION_API_URL global
+  apiKey       String?                 @map("api_key") // vazio usa EVOLUTION_API_KEY global
+  purpose      WhatsAppInstancePurpose
+  active       Boolean                 @default(true)
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+
+  messages Message[]
+
+  @@map("whatsapp_instances")
 }
 
 // ============================================================
@@ -273,6 +302,7 @@ model FollowUp {
 
 enum FollowUpRunStatus {
   RUNNING
+  PAUSED
   COMPLETED
   STOPPED
   FAILED

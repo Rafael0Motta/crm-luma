@@ -2,7 +2,8 @@ import { Worker } from "bullmq";
 import { redisConnection } from "../config/redis";
 import { prisma } from "../config/prisma";
 import { logger } from "../config/logger";
-import { sendTextMessage } from "../services/evolution";
+import { sendTextMessage, SendTextResult } from "../services/evolution";
+import { resolveInstanceByPurpose, InstanceCredentials } from "../services/whatsappInstances";
 import { renderBillingTemplate } from "../services/billingTemplate";
 import { daysUntilNextDueDate, offsetMatches, startOfDay } from "../services/billingSchedule";
 
@@ -15,6 +16,7 @@ async function alreadySentToday(billingReminderId: string, clientId: string | nu
 }
 
 async function sendReminder(
+  instance: InstanceCredentials | null,
   reminder: { id: string; messageTemplate: string },
   client: { id: string; name: string; phone: string },
   serviceInfo: { serviceName: string; value: any; dueDay: number } | null
@@ -26,7 +28,9 @@ async function sendReminder(
     dueDay: serviceInfo?.dueDay,
   });
 
-  const result = await sendTextMessage(client.phone, content);
+  const result: SendTextResult = instance
+    ? await sendTextMessage(instance, client.phone, content)
+    : { success: false, errorMessage: "Evolution API nao configurada para cobranca" };
   await prisma.billingReminderLog.create({
     data: {
       billingReminderId: reminder.id,
@@ -37,7 +41,11 @@ async function sendReminder(
   });
 }
 
-async function processStandardServiceReminder(reminder: { id: string; serviceId: string; messageTemplate: string; daysOffset: number }, today: Date) {
+async function processStandardServiceReminder(
+  instance: InstanceCredentials | null,
+  reminder: { id: string; serviceId: string; messageTemplate: string; daysOffset: number },
+  today: Date
+) {
   const subscriptions = await prisma.clientService.findMany({
     where: { serviceId: reminder.serviceId, status: "ATIVO" },
     include: { client: true, service: true },
@@ -48,7 +56,7 @@ async function processStandardServiceReminder(reminder: { id: string; serviceId:
       if (await alreadySentToday(reminder.id, sub.clientId)) continue;
       const daysToDue = daysUntilNextDueDate(sub.dueDay, today);
       if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
-      await sendReminder(reminder, sub.client, { serviceName: sub.service.name, value: sub.value, dueDay: sub.dueDay });
+      await sendReminder(instance, reminder, sub.client, { serviceName: sub.service.name, value: sub.value, dueDay: sub.dueDay });
     } catch (err) {
       logger.error({ err, reminderId: reminder.id, clientId: sub.clientId }, "Falha ao enviar lembrete de cobranca padrao");
     }
@@ -64,17 +72,20 @@ async function processBillingReminders() {
       client: true,
     },
   });
+  if (reminders.length === 0) return;
+
+  const instance = await resolveInstanceByPurpose("COBRANCA");
 
   for (const reminder of reminders) {
     try {
       if (reminder.serviceId) {
-        await processStandardServiceReminder(reminder as any, today);
+        await processStandardServiceReminder(instance, reminder as any, today);
       } else if (reminder.clientService) {
         if (reminder.clientService.status !== "ATIVO") continue;
         if (await alreadySentToday(reminder.id, reminder.clientService.clientId)) continue;
         const daysToDue = daysUntilNextDueDate(reminder.clientService.dueDay, today);
         if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
-        await sendReminder(reminder, reminder.clientService.client, {
+        await sendReminder(instance, reminder, reminder.clientService.client, {
           serviceName: reminder.clientService.service.name,
           value: reminder.clientService.value,
           dueDay: reminder.clientService.dueDay,
@@ -83,7 +94,7 @@ async function processBillingReminders() {
         if (await alreadySentToday(reminder.id, reminder.clientId)) continue;
         const daysToDue = daysUntilNextDueDate(reminder.dueDay, today);
         if (!offsetMatches(reminder.daysOffset, daysToDue)) continue;
-        await sendReminder(reminder, reminder.client, null);
+        await sendReminder(instance, reminder, reminder.client, null);
       }
     } catch (err) {
       logger.error({ err, reminderId: reminder.id }, "Falha ao enviar lembrete de cobranca");

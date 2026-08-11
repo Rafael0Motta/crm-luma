@@ -1,6 +1,7 @@
 import { prisma } from "../config/prisma";
 import { logger } from "../config/logger";
-import { sendTextMessage } from "./evolution";
+import { sendTextMessage, SendTextResult } from "./evolution";
+import { resolveInstanceByPurpose } from "./whatsappInstances";
 import { generateAIReply } from "./aiProvider";
 import { publishEvent } from "./eventBus";
 
@@ -92,7 +93,10 @@ async function executeAction(action: Action, event: AutomationEvent) {
     case "send_message": {
       const client = await prisma.client.findUnique({ where: { id: event.clientId } });
       if (!client) return;
-      const result = await sendTextMessage(client.phone, action.content);
+      const instance = await resolveInstanceByPurpose("ATENDIMENTO");
+      const result: SendTextResult = instance
+        ? await sendTextMessage(instance, client.phone, action.content)
+        : { success: false, errorMessage: "Evolution API nao configurada" };
       if (event.conversationId) {
         const sentMessage = await prisma.message.create({
           data: {
@@ -104,6 +108,7 @@ async function executeAction(action: Action, event: AutomationEvent) {
             sender: "AUTOMATION",
             evolutionMessageId: result.evolutionMessageId,
             errorMessage: result.errorMessage,
+            instanceId: instance?.instanceId ?? undefined,
           },
         });
         await prisma.conversation.update({ where: { id: event.conversationId }, data: { lastMessageAt: new Date() } });
@@ -144,7 +149,10 @@ async function executeAction(action: Action, event: AutomationEvent) {
       if (!reply) return;
       const client = await prisma.client.findUnique({ where: { id: event.clientId } });
       if (!client) return;
-      const result = await sendTextMessage(client.phone, reply);
+      const instance = await resolveInstanceByPurpose("ATENDIMENTO");
+      const result: SendTextResult = instance
+        ? await sendTextMessage(instance, client.phone, reply)
+        : { success: false, errorMessage: "Evolution API nao configurada" };
       const aiMessage = await prisma.message.create({
         data: {
           conversationId: event.conversationId,
@@ -155,6 +163,7 @@ async function executeAction(action: Action, event: AutomationEvent) {
           sender: "AI",
           evolutionMessageId: result.evolutionMessageId,
           errorMessage: result.errorMessage,
+          instanceId: instance?.instanceId ?? undefined,
         },
       });
       await prisma.conversation.update({ where: { id: event.conversationId }, data: { lastMessageAt: new Date() } });

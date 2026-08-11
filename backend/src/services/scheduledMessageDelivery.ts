@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
-import { sendTextMessage } from "./evolution";
+import { sendTextMessage, SendTextResult } from "./evolution";
+import { resolveInstanceByPurpose } from "./whatsappInstances";
 import { findOrCreateOpenConversation } from "./conversationHelper";
 import { publishEvent } from "./eventBus";
 
@@ -8,7 +9,10 @@ export async function deliverScheduledMessageToRecipient(
   client: { id: string; phone: string },
   content: string
 ): Promise<boolean> {
-  const result = await sendTextMessage(client.phone, content);
+  const instance = await resolveInstanceByPurpose("ATENDIMENTO");
+  const result: SendTextResult = instance
+    ? await sendTextMessage(instance, client.phone, content)
+    : { success: false, errorMessage: "Evolution API nao configurada" };
 
   await prisma.scheduledMessageRecipient.update({
     where: { id: recipientId },
@@ -30,6 +34,7 @@ export async function deliverScheduledMessageToRecipient(
       sender: "AUTOMATION",
       evolutionMessageId: result.evolutionMessageId,
       errorMessage: result.errorMessage,
+      instanceId: instance?.instanceId ?? undefined,
     },
   });
   await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });

@@ -89,7 +89,7 @@ function CatalogoTab() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <div className="mb-4 flex justify-end">
         <Button onClick={() => setEditing("new")}>
           <Plus size={16} />
@@ -235,7 +235,7 @@ function VinculosTab() {
   const editingSub = subscriptions?.find((s) => s.id === editingId);
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <div className="mb-4 flex justify-end">
         <Button onClick={() => setCreating(true)} disabled={!services?.length}>
           <Link2 size={16} />
@@ -248,7 +248,7 @@ function VinculosTab() {
       ) : subscriptions?.length === 0 ? (
         <EmptyState title="Nenhum vínculo criado" subtitle="Vincule um serviço do catálogo a um cliente" />
       ) : (
-        <Card className="overflow-hidden">
+        <Card className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-ink-100 bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
               <tr>

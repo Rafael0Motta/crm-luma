@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "FollowUpRunStatus" ADD VALUE 'PAUSED' AFTER 'RUNNING';

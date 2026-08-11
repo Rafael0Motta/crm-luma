@@ -3,7 +3,7 @@ import { Loader2, Search, X } from "lucide-react";
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between border-b border-ink-100 bg-white px-8 py-5">
+    <div className="flex flex-col gap-3 border-b border-ink-100 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-8 lg:py-5">
       <div>
         <h1 className="text-xl font-semibold text-ink-950">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-ink-500">{subtitle}</p>}
