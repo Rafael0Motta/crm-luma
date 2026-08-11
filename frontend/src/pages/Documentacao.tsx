@@ -14,6 +14,7 @@ import {
   Bell,
   BookOpen,
   Lightbulb,
+  Smartphone,
 } from "lucide-react";
 import { Card } from "../components/ui";
 
@@ -130,6 +131,17 @@ const SECTIONS: Section[] = [
             items={[
               "Digite a mensagem no campo inferior e pressione Enter (ou clique no botão de enviar).",
               "Para enviar uma imagem, áudio ou documento, clique no clipe de anexo, escolha o arquivo e, se quiser, escreva uma legenda antes de enviar.",
+              "Também dá para colar uma imagem copiada (Ctrl+V) direto no campo de mensagem, ou arrastar um arquivo do computador e soltar em qualquer lugar da conversa.",
+            ]}
+          />
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink-900">Ver e baixar arquivos recebidos</p>
+          <Steps
+            items={[
+              "Clique em uma imagem ou vídeo recebido para abri-lo em tela cheia.",
+              'Passe o mouse sobre uma imagem, vídeo, áudio ou documento e clique no ícone de download para salvar o arquivo no computador.',
             ]}
           />
         </div>
@@ -220,6 +232,7 @@ const SECTIONS: Section[] = [
             "Monte a sequência de mensagens, definindo o intervalo de espera entre cada uma.",
             'Ative "parar sequência se o cliente responder" para interromper automaticamente o follow-up assim que o lead responder.',
             'Use o ícone de histórico para ver quais clientes já passaram por aquele follow-up e em que passo estão.',
+            'Precisa segurar o follow-up de um lead específico sem desativar a automação inteira? No histórico de execuções, clique no ícone de pausa ao lado do lead — ele para de receber as próximas mensagens da sequência até você clicar em retomar.',
           ]}
         />
         <Tip>Follow-ups rodam automaticamente em segundo plano a cada poucos minutos — não é preciso disparar manualmente.</Tip>
@@ -306,10 +319,27 @@ const SECTIONS: Section[] = [
           <p className="mb-2 text-sm font-semibold text-ink-900">WhatsApp (Evolution API)</p>
           <Steps
             items={[
-              "Veja o status da conexão da instância do WhatsApp.",
+              "Veja o status da conexão da instância padrão do WhatsApp.",
               "Se estiver desconectada, gere o QR Code e escaneie com o WhatsApp que vai atender pelo sistema.",
             ]}
           />
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink-900">Instâncias por módulo (múltiplos números)</p>
+          <P>
+            Por padrão, tudo (atendimento, follow-ups e cobrança) sai pelo mesmo número de WhatsApp. Se quiser usar
+            números diferentes para cada finalidade, cadastre instâncias adicionais aqui.
+          </P>
+          <div className="mt-3">
+            <Steps
+              items={[
+                'Clique em "Nova instância" e informe um nome de identificação, o nome da instância cadastrada na Evolution API e qual módulo ela vai atender: Atendimento, Follow-ups ou Cobrança.',
+                "URL e chave de API são opcionais — deixe em branco para usar as credenciais padrão do sistema, ou preencha se essa instância estiver em outra Evolution API.",
+                "Só pode haver uma instância ativa por módulo. Para trocar o número de um módulo, desative a instância atual antes de ativar a nova.",
+                "Use o ícone de QR Code em cada instância para ver o status da conexão e conectar o número, do mesmo jeito que na instância padrão.",
+              ]}
+            />
+          </div>
         </div>
         <div>
           <p className="mb-2 text-sm font-semibold text-ink-900">Inteligência Artificial</p>
@@ -334,6 +364,32 @@ const SECTIONS: Section[] = [
       <div className="space-y-4">
         <P>O sino no topo da tela avisa sobre leads sem resposta há mais de 24 horas — conversas em que sua equipe enviou a última mensagem e o cliente ainda não respondeu.</P>
         <Steps items={["Clique no sino para ver a lista.", "Clique em um lead da lista para ir direto para a conversa dele."]} />
+      </div>
+    ),
+  },
+  {
+    id: "app-instalavel",
+    title: "Instalar como aplicativo",
+    icon: Smartphone,
+    content: (
+      <div className="space-y-4">
+        <P>
+          O CRM pode ser instalado como um aplicativo, no celular ou no computador, ficando com ícone próprio e
+          abrindo em tela cheia — sem precisar abrir o navegador toda vez.
+        </P>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink-900">No celular (Android)</p>
+          <Steps items={['Abra o CRM pelo Chrome e toque no menu (⋮) no canto superior direito.', 'Toque em "Instalar aplicativo" ou "Adicionar à tela inicial".']} />
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink-900">No iPhone (Safari)</p>
+          <Steps items={['Toque no ícone de compartilhar (quadrado com seta para cima).', 'Toque em "Adicionar à Tela de Início".']} />
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink-900">No computador (Chrome/Edge)</p>
+          <Steps items={["Clique no ícone de instalação que aparece do lado direito da barra de endereço.", "O sistema abre então em sua própria janela, separada do navegador."]} />
+        </div>
+        <Tip>As mensagens continuam chegando em tempo real depois de instalado, do mesmo jeito que no navegador.</Tip>
       </div>
     ),
   },

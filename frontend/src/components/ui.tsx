@@ -114,11 +114,12 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   );
 }
 
-export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
+export function EmptyState({ title, subtitle, icon }: { title: string; subtitle?: string; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ink-200 py-16 text-center">
+      {icon && <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-ink-100 text-ink-400">{icon}</div>}
       <p className="text-sm font-medium text-ink-600">{title}</p>
-      {subtitle && <p className="mt-1 text-sm text-ink-400">{subtitle}</p>}
+      {subtitle && <p className="mt-1 max-w-xs text-sm text-ink-400">{subtitle}</p>}
     </div>
   );
 }

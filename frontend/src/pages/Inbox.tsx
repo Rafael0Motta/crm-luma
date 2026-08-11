@@ -19,6 +19,8 @@ import {
   Download,
   Maximize2,
   ArrowLeft,
+  MessageSquare,
+  MessageCircle,
 } from "lucide-react";
 import { api, getApiErrorMessage } from "../api/client";
 import { ClientService, Conversation, ConversationStatus, FunnelStage, Message, Service, User } from "../types";
@@ -556,15 +558,24 @@ export function Inbox() {
 
         <div className="flex-1 overflow-y-auto">
           {isLoading && <LoadingState />}
-          {conversations?.length === 0 && <EmptyState title="Nenhuma conversa" subtitle="As conversas do WhatsApp aparecerão aqui." />}
+          {conversations?.length === 0 && (
+            <div className="p-4">
+              <EmptyState
+                icon={<MessageSquare size={20} />}
+                title="Nenhuma conversa"
+                subtitle="As conversas do WhatsApp aparecerão aqui."
+              />
+            </div>
+          )}
           {conversations?.map((conv) => {
             const name = conv.client?.name ?? conv.whatsappNumber;
+            const isSelected = selectedId === conv.id;
             return (
               <button
                 key={conv.id}
                 onClick={() => setSelectedId(conv.id)}
-                className={`flex w-full items-start gap-3 border-b border-ink-50 px-4 py-3 text-left transition-colors hover:bg-ink-50 ${
-                  selectedId === conv.id ? "bg-ink-100" : ""
+                className={`flex w-full items-start gap-3 border-b border-l-[3px] border-ink-50 px-[13px] py-3 text-left transition-colors ${
+                  isSelected ? "border-l-ink-800 bg-ink-50" : "border-l-transparent hover:bg-ink-50"
                 }`}
               >
                 <Avatar name={name} />
@@ -620,14 +631,18 @@ export function Inbox() {
           </div>
         )}
         {!selected ? (
-          <div className="flex flex-1 items-center justify-center">
-            <EmptyState title="Selecione uma conversa" subtitle="Escolha uma conversa na lista ao lado para visualizar as mensagens." />
+          <div className="flex flex-1 items-center justify-center p-8">
+            <EmptyState
+              icon={<MessageCircle size={22} />}
+              title="Selecione uma conversa"
+              subtitle="Escolha uma conversa na lista ao lado para visualizar as mensagens."
+            />
           </div>
         ) : (
           <>
-            <div className="border-b border-ink-100 bg-white px-4 py-3 lg:px-6">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-2">
+            <div className="border-b border-ink-100 bg-white px-4 py-3 shadow-sm lg:px-6">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-3">
                   <button
                     onClick={() => setSelectedId(null)}
                     className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 lg:hidden"
@@ -636,12 +651,12 @@ export function Inbox() {
                     <ArrowLeft size={18} />
                   </button>
                   <Avatar name={selected.client?.name ?? selected.whatsappNumber} size={38} />
-                  <div>
-                    <p className="text-sm font-semibold text-ink-950">{selected.client?.name ?? selected.whatsappNumber}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink-950">{selected.client?.name ?? selected.whatsappNumber}</p>
                     <p className="text-xs text-ink-500">{selected.whatsappNumber}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 overflow-x-auto">
+                <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto">
                   <button
                     onClick={() => aiToggleMutation.mutate(!selected.aiEnabled)}
                     title={selected.aiEnabled ? "IA ativada nesta conversa — clique para desativar" : "IA desativada nesta conversa — clique para ativar"}
@@ -654,37 +669,35 @@ export function Inbox() {
                     <Bot size={14} />
                     IA {selected.aiEnabled ? "ativa" : "inativa"}
                   </button>
+                  <div className="mx-1 h-6 w-px flex-shrink-0 bg-ink-100" />
                   <button
                     onClick={() => setScheduleOpen(true)}
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
                     title="Agendar mensagem para este cliente"
                   >
-                    <CalendarClock size={14} />
-                    Agendar
+                    <CalendarClock size={16} />
                   </button>
                   <button
                     onClick={() => setLinkServiceOpen(true)}
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
                     title="Vincular este lead a um serviço"
                   >
-                    <Package size={14} />
-                    Vincular serviço
+                    <Package size={16} />
                   </button>
                   <button
                     onClick={() => setBillingOpen(true)}
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
                     title="Criar lembrete de cobrança para este lead"
                   >
-                    <Receipt size={14} />
-                    Criar cobrança
+                    <Receipt size={16} />
                   </button>
                   <button
                     onClick={() => statusMutation.mutate("RESOLVIDA")}
                     disabled={selected.status === "RESOLVIDA"}
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-40"
+                    title="Marcar conversa como resolvida"
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800 disabled:opacity-30 disabled:hover:bg-transparent"
                   >
-                    <CheckCircle2 size={14} />
-                    Resolver
+                    <CheckCircle2 size={16} />
                   </button>
                 </div>
               </div>
@@ -727,7 +740,9 @@ export function Inbox() {
                       <div key={msg.id} className={`flex ${msg.direction === "OUTBOUND" ? "justify-end" : "justify-start"}`}>
                         <div
                           className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm lg:max-w-md ${
-                            msg.direction === "OUTBOUND" ? "bg-ink-800 text-white" : "bg-white text-ink-900"
+                            msg.direction === "OUTBOUND"
+                              ? "rounded-br-md bg-ink-800 text-white"
+                              : "rounded-bl-md border border-ink-100 bg-white text-ink-900"
                           }`}
                         >
                           <MessageMedia message={msg} onPreview={setLightboxMedia} />
@@ -754,7 +769,7 @@ export function Inbox() {
               ))}
               {messages?.length === 0 && (
                 <div className="flex h-full items-center justify-center">
-                  <p className="text-sm text-ink-400">Nenhuma mensagem nesta conversa ainda.</p>
+                  <EmptyState icon={<MessageCircle size={20} />} title="Nenhuma mensagem nesta conversa ainda" />
                 </div>
               )}
             </div>
@@ -788,7 +803,7 @@ export function Inbox() {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-ink-200 text-ink-500 hover:bg-ink-50"
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-ink-200 text-ink-500 hover:bg-ink-50"
                   title="Anexar arquivo"
                 >
                   <Paperclip size={16} />
@@ -805,12 +820,12 @@ export function Inbox() {
                   }}
                   rows={1}
                   placeholder={pendingFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
-                  className="max-h-32 flex-1 resize-none rounded-lg border border-ink-200 px-3 py-2.5 text-sm focus:border-ink-500 focus:outline-none focus:ring-2 focus:ring-ink-100"
+                  className="max-h-32 flex-1 resize-none rounded-2xl border border-ink-200 px-4 py-2.5 text-sm focus:border-ink-500 focus:outline-none focus:ring-2 focus:ring-ink-100"
                 />
                 <button
                   onClick={handleSend}
                   disabled={sendMutation.isPending || sendMediaMutation.isPending || (!draft.trim() && !pendingFile)}
-                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-ink-800 text-white hover:bg-ink-700 disabled:bg-ink-300"
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-ink-800 text-white transition-colors hover:bg-ink-700 disabled:bg-ink-300"
                 >
                   <Send size={16} />
                 </button>
